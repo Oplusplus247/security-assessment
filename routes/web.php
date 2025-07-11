@@ -63,8 +63,8 @@ Route::middleware('auth')->group(function () {
     Route::post('/send-questions', [QuestionController::class, 'sendQuestionsToEmails'])->name('questions.send.emails');
     
     // Assessment routes
-    Route::get('/assessment-form/{flow?}', [AssessmentController::class, 'showForm'])->name('assessment.form.submit');
-    Route::post('/assessment-form', [AssessmentController::class, 'submitForm'])->name('assessment.submit');
+    Route::get('/assessment-form/{flow?}', [AssessmentController::class, 'showForm'])->name('assessment.form');
+    Route::post('/assessment-form', [AssessmentController::class, 'submitForm'])->name('assessment.form.submit');
     
     // Enhanced assessment routes
     Route::post('/assessment/save-response', [AssessmentController::class, 'saveResponse'])->name('assessment.save-response');
