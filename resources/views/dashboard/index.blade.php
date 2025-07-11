@@ -41,8 +41,6 @@
                    style="background-color: {{ getFactorBackgroundColor($factor['level']) }}">
                     {{ $factor['name'] }}
                     <div class="text-xs mt-1 opacity-90">{{ $factor['level'] }}</div>
-                    {{-- ADDED: Stage labels for factors --}}
-                    <div class="text-xs mt-1 opacity-75">{{ getReadinessStage($factor['level']) }}</div>
                 </a>
             @endforeach
             
