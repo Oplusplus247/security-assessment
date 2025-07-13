@@ -51,8 +51,7 @@ if (!function_exists('getReadinessStage')) {
      * @param float $score
      * @return string
      */
-    function getReadinessStage($score)
-    {
+    function getReadinessStage($score) {
         if ($score >= 0.00 && $score <= 1.25) {
             return 'Beginner';
         } elseif ($score >= 1.26 && $score <= 2.50) {
@@ -74,19 +73,18 @@ if (!function_exists('getReadinessStageColor')) {
      * @param string $stage
      * @return string
      */
-    function getReadinessStageColor($stage)
-    {
+    function getReadinessStageColor($stage) {
         switch ($stage) {
             case 'Beginner':
-                return 'text-red-600';
+                return '#ef4444'; // red-500
             case 'Formative':
-                return 'text-orange-600';
+                return '#f97316'; // orange-500
             case 'Progressive':
-                return 'text-blue-600';
+                return '#eab308'; // yellow-500
             case 'Mature':
-                return 'text-green-600';
+                return '#10b981'; // green-500
             default:
-                return 'text-gray-600';
+                return '#6b7280'; // gray-500
         }
     }
 }

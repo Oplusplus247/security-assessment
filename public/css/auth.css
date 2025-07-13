@@ -9,7 +9,7 @@ body {
   height: 1282px;
   background: rgba(37,64,143,1);
   opacity: 1;
-  position: absolute;
+  position: fixed;
   top: 0px;
   left: 0px;
   overflow: hidden;
@@ -50,7 +50,7 @@ body {
   background-size: cover;
   opacity: 1;
   position: absolute;
-  top: 282px;
+  top: 200px;
   left: 623px;
   overflow: hidden;
 }
@@ -154,11 +154,11 @@ body {
   width: 122px;
   color: rgba(43,54,116,1);
   position: absolute;
-  top: 0px;
-  left: 33px;
+  top: 4px;
+  left: 0px;
   font-family: DM Sans;
   font-weight: Regular;
-  font-size: 16px;
+  font-size: 14px;
   opacity: 1;
   text-align: left;
 }
@@ -523,6 +523,7 @@ body {
   .v33_4284 {
       cursor: pointer;
       text-decoration: none;
+      font-size: 14px;
   }
   
   .v33_4284:hover {

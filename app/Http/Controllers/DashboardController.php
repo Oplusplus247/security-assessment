@@ -1,5 +1,6 @@
 <?php
-// app/Http/Controllers/DashboardController.php
+// app/Http/Controllers/DashboardController.php - Simplified factorDashboard method
+
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
@@ -18,19 +19,10 @@ class DashboardController extends Controller
         $department = $departmentSlug === 'overall' ? null : Department::where('slug', $departmentSlug)->first();
         $departmentId = $department?->id;
         
-        // Get current overall readiness level
         $currentReadiness = $this->getCurrentReadinessLevel($departmentId);
-        
-        // Get aggregated readiness by factor for radar chart
         $aggregatedReadiness = $this->getAggregatedReadiness($departmentId);
-        
-        // Get readiness level by factor for the grid
         $factorReadiness = $this->getFactorReadiness($departmentId);
-        
-        // Get historical assessment data
         $historicalData = $this->getHistoricalData($departmentId);
-        
-        // Get departments for dropdown
         $departments = Department::all();
         
         return view('dashboard.index', compact(
@@ -42,38 +34,42 @@ class DashboardController extends Controller
         ));
     }
 
-    public function factorDashboard(Request $request)
+    public function factorDashboard(Request $request, $factorSlug = null)
     {
-        $departmentSlug = $request->get('department', 'overall');
-        $factorSlug = $request->get('factor', 'it-infrastructure');
+        // Get factor from route parameter, fallback to IT Infrastructure
+        $factorSlug = $factorSlug ?? 'it-infrastructure';
         
-        // Find the department and factor
-        $department = $departmentSlug === 'overall' ? null : Department::where('slug', $departmentSlug)->first();
+        // Find the factor
         $factor = Factor::where('slug', $factorSlug)->first();
         
+        // If factor not found, redirect to first available factor
         if (!$factor) {
-            $factor = Factor::where('slug', 'it-infrastructure')->first();
+            $factor = Factor::where('is_active', true)->first();
+            if ($factor) {
+                return redirect()->route('dashboard.factor', ['factor' => $factor->slug]);
+            }
+            // If no factors exist, create a default one
+            abort(404, 'No factors found');
         }
         
-        // Get current assessment for this factor
-        $currentAssessment = $this->getFactorAssessment($factor->id, $department?->id);
+        // Get all factors for the dropdown
+        $factors = Factor::where('is_active', true)->get();
+        
+        // Get current assessment for this factor (overall department for now)
+        $currentAssessment = $this->getFactorAssessment($factor->id, null);
         
         // Get questions for this factor with their current scores
-        $questions = $this->getFactorQuestions($factor->id, $department?->id);
+        $questions = $this->getFactorQuestions($factor->id, null);
         
         // Get historical data for this factor
-        $historicalData = $this->getFactorHistoricalData($factor->id, $department?->id);
-        
-        // Get departments for dropdown
-        $departments = Department::all();
+        $historicalData = $this->getFactorHistoricalData($factor->id, null);
         
         return view('dashboard.factor', compact(
             'currentAssessment', 
             'questions', 
             'historicalData', 
-            'department',
             'factor',
-            'departments'
+            'factors'
         ));
     }
 
@@ -84,7 +80,6 @@ class DashboardController extends Controller
         
         $department = $selectedDepartment === 'overall' ? null : Department::where('slug', $selectedDepartment)->first();
         
-        // Get historical data for selected department
         $historicalData = $this->getHistoricalData($department?->id);
         
         return view('dashboard.historical', compact(
@@ -94,7 +89,7 @@ class DashboardController extends Controller
         ));
     }
 
-    // Helper methods
+    // Private helper methods
     private function getCurrentReadinessLevel($departmentId = null)
     {
         $query = Assessment::query();
@@ -103,14 +98,18 @@ class DashboardController extends Controller
             $query->where('department_id', $departmentId);
         }
         
-        $latestAssessment = $query->latest('assessment_date')->first();
+        $latestAssessment = $query->where('status', 'completed')
+                                 ->latest('assessment_date')
+                                 ->first();
         
         if (!$latestAssessment) {
             return (object) [
                 'readiness_level' => 0,
-                'target_level' => 5.0
+                'target_level' => 4.0
             ];
         }
+        
+        $this->recalculateAssessmentScore($latestAssessment);
         
         return $latestAssessment;
     }
@@ -121,7 +120,8 @@ class DashboardController extends Controller
         $aggregated = [];
         
         foreach ($factors as $factor) {
-            $aggregated[$factor->name] = $factor->getReadinessLevel($departmentId);
+            $level = $this->getFactorReadinessLevel($factor->id, $departmentId);
+            $aggregated[$factor->name] = $level;
         }
         
         return $aggregated;
@@ -133,7 +133,7 @@ class DashboardController extends Controller
         $factorReadiness = [];
         
         foreach ($factors as $factor) {
-            $level = $factor->getReadinessLevel($departmentId);
+            $level = $this->getFactorReadinessLevel($factor->id, $departmentId);
             $factorReadiness[] = [
                 'name' => $factor->name,
                 'level' => $level,
@@ -145,6 +145,46 @@ class DashboardController extends Controller
         return $factorReadiness;
     }
 
+    private function getFactorReadinessLevel($factorId, $departmentId = null)
+    {
+        // Get latest assessment's responses for this factor
+        $latestAssessment = Assessment::query();
+        if ($departmentId) {
+            $latestAssessment->where('department_id', $departmentId);
+        }
+        $latestAssessment = $latestAssessment->where('status', 'completed')
+                                           ->latest('assessment_date')
+                                           ->first();
+
+        if (!$latestAssessment) {
+            return 0;
+        }
+
+        // Get responses for this factor from the latest assessment
+        $responses = Response::where('assessment_id', $latestAssessment->id)
+                           ->whereHas('question', function($q) use ($factorId) {
+                               $q->where('factor_id', $factorId);
+                           })
+                           ->with('question')
+                           ->get();
+        
+        if ($responses->isEmpty()) {
+            return 0;
+        }
+
+        // Calculate weighted average
+        $totalWeightedScore = 0;
+        $totalWeight = 0;
+
+        foreach ($responses as $response) {
+            $weight = $response->question->weight ?? 1;
+            $totalWeightedScore += $response->score * $weight;
+            $totalWeight += $weight;
+        }
+
+        return $totalWeight > 0 ? round($totalWeightedScore / $totalWeight, 1) : 0;
+    }
+
     private function getHistoricalData($departmentId = null)
     {
         $query = Assessment::query();
@@ -153,27 +193,42 @@ class DashboardController extends Controller
             $query->where('department_id', $departmentId);
         }
         
-        $assessments = $query->orderBy('assessment_date')
-                           ->take(12) // Last 12 assessments
-                           ->get();
+        // Get assessments, group by date, and take only the latest per date
+        $assessments = $query->where('status', 'completed')
+                            ->orderBy('assessment_date', 'desc')
+                            ->get()
+                            ->groupBy(function($assessment) {
+                                return $assessment->assessment_date->format('Y-m-d');
+                            })
+                            ->map(function($group) {
+                                // Take only the latest assessment for each date
+                                return $group->first();
+                            })
+                            ->take(6) // Limit to 6 data points for readability
+                            ->sortBy('assessment_date')
+                            ->values();
         
-        return $assessments->map(function ($assessment) {
-            return [
-                'date' => $assessment->assessment_date->format('d/m/Y'),
+        $historicalData = [];
+        
+        foreach ($assessments as $assessment) {
+            $this->recalculateAssessmentScore($assessment);
+            $historicalData[] = [
+                'date' => $assessment->assessment_date->format('M Y'), // Better date format
                 'readiness_level' => $assessment->readiness_level,
-                'target_level' => $assessment->target_level
+                'target_level' => $assessment->target_level ?? 4.0
             ];
-        })->toArray();
+        }
+        
+        return $historicalData;
     }
 
     private function getFactorAssessment($factorId, $departmentId = null)
     {
-        $factor = Factor::find($factorId);
-        $readinessLevel = $factor->getReadinessLevel($departmentId);
+        $readinessLevel = $this->getFactorReadinessLevel($factorId, $departmentId);
         
         return (object) [
             'readiness_level' => $readinessLevel,
-            'target_level' => 5.0
+            'target_level' => 4.0
         ];
     }
 
@@ -186,60 +241,132 @@ class DashboardController extends Controller
                            ->get();
         
         return $questions->map(function ($question) use ($departmentId) {
+            $currentScore = $this->getQuestionCurrentScore($question->id, $departmentId);
+            
             return (object) [
                 'id' => $question->id,
                 'question' => $question->question,
-                'current_score' => $question->getCurrentScore($departmentId),
-                'weight' => $question->weight ?? 1 // FIXED: Added missing weight
+                'current_score' => $currentScore,
+                'weight' => $question->weight ?? 1
             ];
         });
     }
 
+    private function getQuestionCurrentScore($questionId, $departmentId = null)
+    {
+        // Get the latest assessment
+        $latestAssessment = Assessment::query();
+        if ($departmentId) {
+            $latestAssessment->where('department_id', $departmentId);
+        }
+        $latestAssessment = $latestAssessment->where('status', 'completed')
+                                           ->latest('assessment_date')
+                                           ->first();
+
+        if (!$latestAssessment) {
+            return 0;
+        }
+
+        // Get response for this question from the latest assessment
+        $response = Response::where('assessment_id', $latestAssessment->id)
+                          ->where('question_id', $questionId)
+                          ->first();
+        
+        return $response ? $response->score : 0;
+    }
+
     private function getFactorHistoricalData($factorId, $departmentId = null)
     {
-        // Get responses for this factor over time
-        $responses = Response::whereHas('question', function ($query) use ($factorId) {
-            $query->where('factor_id', $factorId);
-        });
-        
+        $query = Assessment::query();
         if ($departmentId) {
-            $responses->whereHas('assessment', function ($query) use ($departmentId) {
-                $query->where('department_id', $departmentId);
-            });
+            $query->where('department_id', $departmentId);
         }
         
-        $responses = $responses->with(['assessment'])
-                             ->orderBy('created_at')
-                             ->get()
-                             ->groupBy(function ($response) {
-                                 return $response->assessment->assessment_date->format('Y-m');
-                             });
+        // Get unique assessments by date, limited to recent ones
+        $assessments = $query->where('status', 'completed')
+                            ->orderBy('assessment_date', 'desc')
+                            ->take(6) // Limit to 6 most recent assessments
+                            ->get()
+                            ->unique('assessment_date') // Remove duplicates by date
+                            ->sortBy('assessment_date'); // Sort chronologically
         
         $historicalData = [];
-        foreach ($responses as $monthKey => $monthResponses) {
-            $avgScore = $monthResponses->avg('score');
-            $date = Carbon::createFromFormat('Y-m', $monthKey);
+        
+        foreach ($assessments as $assessment) {
+            // Calculate factor average for this assessment
+            $responses = Response::where('assessment_id', $assessment->id)
+                            ->whereHas('question', function($q) use ($factorId) {
+                                $q->where('factor_id', $factorId);
+                            })
+                            ->with('question')
+                            ->get();
             
-            $historicalData[] = [
-                'date' => $date->format('d/m/Y'),
-                'readiness_level' => round($avgScore, 1),
-                'target_level' => 4.0 // Default target
-            ];
+            if ($responses->isNotEmpty()) {
+                $totalWeightedScore = 0;
+                $totalWeight = 0;
+                
+                foreach ($responses as $response) {
+                    $weight = $response->question->weight ?? 1;
+                    $totalWeightedScore += $response->score * $weight;
+                    $totalWeight += $weight;
+                }
+                
+                $avgScore = $totalWeight > 0 ? $totalWeightedScore / $totalWeight : 0;
+                
+                $historicalData[] = [
+                    'date' => $assessment->assessment_date->format('M j'), // Shorter format: "Oct 4"
+                    'readiness_level' => round($avgScore, 1),
+                    'target_level' => 4.0
+                ];
+            }
         }
         
         return $historicalData;
     }
+
+    private function recalculateAssessmentScore($assessment)
+    {
+        $responses = $assessment->responses()->with('question')->get();
+        
+        if ($responses->isEmpty()) {
+            $assessment->update([
+                'readiness_level' => 0,
+                'total_score' => 0
+            ]);
+            return;
+        }
+        
+        $totalWeightedScore = 0;
+        $totalWeight = 0;
+        
+        foreach ($responses as $response) {
+            $weight = $response->question->weight ?? 1;
+            $totalWeightedScore += $response->score * $weight;
+            $totalWeight += $weight;
+        }
+        
+        $averageScore = $totalWeight > 0 ? $totalWeightedScore / $totalWeight : 0;
+        
+        $assessment->update([
+            'readiness_level' => round($averageScore, 1),
+            'total_score' => round($averageScore, 1)
+        ]);
+    }
+
     private function getColorClass($level)
     {
-        if ($level >= 3.0) {
+        if ($level >= 3.76) {
             return 'green-500';
-        } elseif ($level >= 2.0) {
+        } elseif ($level >= 2.51) {
+            return 'yellow-500';
+        } elseif ($level >= 1.26) {
             return 'orange-500';
         } else {
             return 'red-500';
         }
     }
 
+    // AJAX Methods (keeping for compatibility)
     public function getHistoricalDataAjax(Request $request)
     {
         $departmentSlug = $request->get('department', 'overall');
@@ -253,7 +380,6 @@ class DashboardController extends Controller
         ]);
     }
 
-    // FIXED: Updated method to properly handle department filtering
     public function getFactorQuestionsAjax(Request $request)
     {
         $factorSlug = $request->get('factor');
@@ -269,7 +395,6 @@ class DashboardController extends Controller
             ], 404);
         }
         
-        // Use the helper method with proper department filtering
         $questions = $this->getFactorQuestions($factor->id, $department?->id);
         
         return response()->json([
@@ -280,7 +405,6 @@ class DashboardController extends Controller
         ]);
     }
 
-    // FIXED: Updated method to properly handle department filtering
     public function getCorrectiveActionsAjax(Request $request)
     {
         $factorSlug = $request->get('factor');
@@ -296,24 +420,12 @@ class DashboardController extends Controller
             ], 404);
         }
         
-        // Get corrective actions for this factor
         $correctiveActionsQuery = \App\Models\CorrectiveAction::whereHas('question', function($q) use ($factor) {
             $q->where('factor_id', $factor->id);
         })->with('question');
         
-        // FIXED: Apply department filter properly
-        if ($department) {
-            // Filter by department name or show all if department is 'overall'
-            $correctiveActionsQuery->where(function($query) use ($department) {
-                $query->where('department', $department->name)
-                      ->orWhere('department', 'All Departments')
-                      ->orWhereNull('department');
-            });
-        }
-        
         $correctiveActions = $correctiveActionsQuery->get();
         
-        // Format the data for frontend
         $formattedActions = $correctiveActions->map(function($action) {
             return [
                 'id' => $action->id,
@@ -356,6 +468,4 @@ class DashboardController extends Controller
             'department' => $department
         ]);
     }
-
-    
 }

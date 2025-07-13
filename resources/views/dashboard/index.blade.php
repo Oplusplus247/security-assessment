@@ -9,50 +9,67 @@
 
 @section('content')
 <div class="grid grid-cols-1 md:grid-cols-2 gap-6 h-full auto-rows-fr">
-    <div class="bg-white rounded-xl shadow-sm p-6 flex flex-col items-center justify-center min-h-[350px]">
-        <h3 class="text-xl font-semibold text-gray-800 mb-6">Current Readiness Level</h3>
+    {{-- Current Readiness Level --}}
+<div class="bg-white rounded-xl shadow-sm p-6 min-h-[350px]">
+    <h3 class="text-lg font-semibold text-gray-800">Current Readiness Level</h3>
+    <div class="-mx-6 h-0.5 bg-gray-200 my-4"></div><br><br>
+
+    <div class="flex items-center justify-center">
         <div class="relative w-56 h-56 flex items-center justify-center">
             <canvas id="gaugeChart"></canvas>
             <div class="absolute inset-0 flex flex-col items-center justify-center">
                 <span id="gaugeValue" class="text-4xl font-bold text-gray-800">{{ $currentReadiness->readiness_level ?? 0 }}</span>
-                {{-- ADDED: Readiness Stage Label --}}
-                <span id="gaugeStage" class="text-lg font-semibold mt-2 {{ getReadinessStageColor(getReadinessStage($currentReadiness->readiness_level ?? 0)) }}">
+                <span id="gaugeStage" class="text-lg font-semibold mt-2" style="color: {{ getReadinessStageColor(getReadinessStage($currentReadiness->readiness_level ?? 0)) }}">
                     {{ getReadinessStage($currentReadiness->readiness_level ?? 0) }}
                 </span>
             </div>
         </div>
     </div>
+</div>
 
-    {{-- FIXED: Made radar chart bigger --}}
-    <div class="bg-white rounded-xl shadow-sm p-6 flex flex-col items-center justify-center min-h-[350px]">
-        <h3 class="text-xl font-semibold text-gray-800 mb-6">Aggregated Readiness Level</h3>
-        <div class="w-80 h-80 flex items-center justify-center">
-            <canvas id="radarChart"></canvas>
+
+    {{-- Aggregated Readiness Level --}}
+    <div class="bg-white rounded-xl shadow-sm p-6 min-h-[350px]">
+        <h3 class="text-lg font-semibold text-gray-800">Aggregated Readiness Level</h3>
+        <div class="-mx-6 h-0.5 bg-gray-200 my-4"></div>
+        
+        <div class="flex items-center justify-center">
+            <div class="w-100 h-100 flex items-center justify-center">
+                <canvas id="radarChart"></canvas>
+            </div>
         </div>
     </div>
 
+    
+
+
+
+    {{-- Readiness Level By Factor --}}
     <div class="bg-white rounded-xl shadow-sm p-6 min-h-[350px]">
-        <h3 class="text-xl font-semibold text-gray-800 mb-6">Readiness Level By Factor</h3>
+        <h3 class="text-lg font-semibold text-gray-800">Readiness Level By Factor</h3>
+        <div class="-mx-6 h-0.5 bg-gray-200 my-4"></div><br>
         <div class="grid grid-cols-3 gap-2" id="factorGrid">
             @foreach($factorReadiness as $factor)
-                {{-- FIXED: Use inline styles for reliable colors --}}
                 <a href="{{ route('dashboard.factor', ['factor' => $factor['slug']]) }}" 
                    class="text-white p-3 rounded text-center font-medium text-xs sm:text-sm py-4 hover:opacity-90 transition-all duration-200 cursor-pointer hover:transform hover:-translate-y-1"
                    style="background-color: {{ getFactorBackgroundColor($factor['level']) }}">
                     {{ $factor['name'] }}
-                    <div class="text-xs mt-1 opacity-90">{{ $factor['level'] }}</div>
+                    <div class="text-xs mt-1 opacity-90">{{ number_format($factor['level'], 1) }}</div>
                 </a>
             @endforeach
             
-            {{-- Add empty div if odd number of factors --}}
+            {{-- Add empty div if needed for grid alignment --}}
             @if(count($factorReadiness) % 3 !== 0)
-                <div class="bg-gray-200 p-3 rounded text-center font-medium text-xs opacity-0"></div>
+                @for($i = 0; $i < (3 - (count($factorReadiness) % 3)); $i++)
+                    <div class="bg-gray-200 p-3 rounded text-center font-medium text-xs opacity-0"></div>
+                @endfor
             @endif
         </div>
     </div>
 
+    {{-- Historical Assessment --}}
     <div class="bg-white rounded-xl shadow-sm p-6 flex flex-col min-h-[350px] relative">
-        <div class="flex justify-between items-center mb-6">
+        <div class="flex justify-between items-center">
             <h3 class="text-xl font-semibold text-gray-800">Historical Assessment</h3>
             <select id="departmentSelect" class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
                 @foreach($departments as $department)
@@ -60,9 +77,14 @@
                 @endforeach
             </select>
         </div>
+
+        {{-- Full-width divider below title and dropdown --}}
+        <div class="-mx-6 h-0.5 bg-gray-200 my-4"></div>
+
         <div class="flex-grow h-64 flex items-center justify-center">
             <canvas id="historicalChart"></canvas>
         </div>
+
         <div class="flex items-center justify-center mt-4 space-x-6 text-base">
             <div class="flex items-center space-x-2">
                 <div class="w-4 h-4 bg-blue-300 rounded"></div>
@@ -73,8 +95,7 @@
                 <span class="text-gray-600">Target level</span>
             </div>
         </div>
-        
-        {{-- Loading indicator for Historical Assessment --}}
+
         <div id="historicalLoading" class="absolute inset-0 bg-white bg-opacity-75 flex items-center justify-center hidden rounded-xl">
             <div class="flex items-center space-x-2">
                 <div class="animate-spin rounded-full h-6 w-6 border-b-2 border-blue-600"></div>
@@ -82,17 +103,20 @@
             </div>
         </div>
     </div>
+
 </div>
 
-{{-- FIXED: Color helper function with proper color values --}}
+{{-- Updated color helper functions with new mapping --}}
 @php
 function getFactorBackgroundColor($level) {
-    if ($level >= 3.0) {
-        return '#3ec516'; // Green-500 for >= 3
-    } elseif ($level >= 2.0) {
-        return '#e4ab16'; // Orange-500 for >= 2 but < 3
+    if ($level >= 3.76) {
+        return '#10b981'; // Green for Mature (3.76-5.00)
+    } elseif ($level >= 2.51) {
+        return '#eab308'; // Yellow for Progressive (2.51-3.75)
+    } elseif ($level >= 1.26) {
+        return '#f97316'; // Orange for Formative (1.26-2.50)
     } else {
-        return '#f34b26'; // Red-500 for < 2
+        return '#ef4444'; // Red for Beginner (0.00-1.25)
     }
 }
 @endphp
@@ -103,7 +127,7 @@ let gaugeChart = null;
 let radarChart = null;
 let historicalChart = null;
 
-// ADDED: JavaScript function to get readiness stage
+// Updated readiness stage functions
 function getReadinessStage(score) {
     if (score >= 0.00 && score <= 1.25) {
         return 'Beginner';
@@ -118,7 +142,6 @@ function getReadinessStage(score) {
     }
 }
 
-// ADDED: JavaScript function to get stage color class
 function getReadinessStageColor(stage) {
     switch (stage) {
         case 'Beginner':
@@ -126,7 +149,7 @@ function getReadinessStageColor(stage) {
         case 'Formative':
             return '#f97316'; // orange-500
         case 'Progressive':
-            return '#3b82f6'; // blue-500
+            return '#eab308'; // yellow-500
         case 'Mature':
             return '#10b981'; // green-500
         default:
@@ -135,10 +158,8 @@ function getReadinessStageColor(stage) {
 }
 
 document.addEventListener('DOMContentLoaded', function() {
-    // Initialize charts with current data
     initializeCharts();
     
-    // Department selector change handler - NOW WITH AJAX!
     document.getElementById('departmentSelect').addEventListener('change', function() {
         const selectedDepartment = this.value;
         updateHistoricalChart(selectedDepartment);
@@ -146,7 +167,6 @@ document.addEventListener('DOMContentLoaded', function() {
 });
 
 function initializeCharts() {
-    // Get data from PHP
     const currentReadiness = @json($currentReadiness);
     const aggregatedReadiness = @json($aggregatedReadiness);
     const historicalData = @json($historicalData);
@@ -155,9 +175,8 @@ function initializeCharts() {
     const gaugeCtx = document.getElementById('gaugeChart');
     if (gaugeCtx) {
         const readinessValue = currentReadiness.readiness_level || 0;
-        const remaining = 5 - readinessValue;
+        const remaining = 4 - readinessValue; // Updated for 0-4 scale
         
-        // UPDATED: Dynamic gauge color based on readiness stage
         const stage = getReadinessStage(readinessValue);
         const gaugeColor = getReadinessStageColor(stage);
         
@@ -181,7 +200,6 @@ function initializeCharts() {
             }
         });
 
-        // UPDATED: Set stage label and color
         const gaugeStageElement = document.getElementById('gaugeStage');
         if (gaugeStageElement) {
             gaugeStageElement.textContent = stage;
@@ -189,7 +207,7 @@ function initializeCharts() {
         }
     }
 
-    // Aggregated Readiness Radar Chart - FIXED: Bigger and better
+    // Aggregated Readiness Radar Chart
     const radarCtx = document.getElementById('radarChart');
     if (radarCtx) {
         const labels = Object.keys(aggregatedReadiness);
@@ -214,16 +232,17 @@ function initializeCharts() {
                 responsive: true,
                 maintainAspectRatio: false,
                 layout: {
-                    padding: 20
+                    padding: 10
                 },
                 scales: {
                     r: {
                         beginAtZero: true,
-                        max: 5,
+                        max: 4, // Updated for 0-4 scale
                         ticks: {
                             stepSize: 1,
                             display: true,
                             color: '#9CA3AF',
+                            padding: 20,
                             font: {
                                 size: 10
                             }
@@ -238,11 +257,11 @@ function initializeCharts() {
                         },
                         pointLabels: {
                             font: {
-                                size: 11,
+                                size: 14,
                                 weight: '500'
                             },
                             color: '#374151',
-                            padding: 15
+                            padding: 25 
                         }
                     }
                 },
@@ -260,31 +279,40 @@ function initializeCharts() {
         });
     }
 
-    // Historical Assessment Chart
     createHistoricalChart(historicalData);
 }
 
 function createHistoricalChart(data) {
     const historicalCtx = document.getElementById('historicalChart');
     if (historicalCtx) {
-        // Destroy existing chart if it exists
         if (historicalChart) {
             historicalChart.destroy();
         }
         
+        // Filter out duplicate dates and keep latest entry for each date
+        const uniqueData = [];
+        const seenDates = new Set();
+        
+        data.reverse().forEach(item => {
+            if (!seenDates.has(item.date)) {
+                seenDates.add(item.date);
+                uniqueData.push(item);
+            }
+        });
+        
         historicalChart = new Chart(historicalCtx.getContext('2d'), {
             type: 'bar',
             data: {
-                labels: data.map(item => item.date),
+                labels: uniqueData.map(item => item.date),
                 datasets: [{
                     label: 'Readiness level',
-                    data: data.map(item => item.readiness_level),
+                    data: uniqueData.map(item => item.readiness_level),
                     backgroundColor: '#93C5FD',
                     borderRadius: 4,
                     barThickness: 16
                 }, {
                     label: 'Target level',
-                    data: data.map(item => item.target_level),
+                    data: uniqueData.map(item => item.target_level),
                     backgroundColor: '#3B82F6',
                     borderRadius: 4,
                     barThickness: 16
@@ -303,7 +331,7 @@ function createHistoricalChart(data) {
                     },
                     y: {
                         beginAtZero: true,
-                        max: 5,
+                        max: 4, // Updated for 0-4 scale
                         ticks: {
                             stepSize: 1,
                             font: { size: 10 },
@@ -327,9 +355,7 @@ function createHistoricalChart(data) {
     }
 }
 
-// NEW AJAX FUNCTION - Historical Chart Updates Dynamically!
 function updateHistoricalChart(departmentSlug) {
-    // Show loading indicator
     document.getElementById('historicalLoading').classList.remove('hidden');
     
     fetch(`{{ route('dashboard.historical.ajax') }}?department=${departmentSlug}`, {
@@ -350,7 +376,6 @@ function updateHistoricalChart(departmentSlug) {
         console.error('Error:', error);
     })
     .finally(() => {
-        // Hide loading indicator
         document.getElementById('historicalLoading').classList.add('hidden');
     });
 }

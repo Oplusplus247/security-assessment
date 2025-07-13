@@ -1,5 +1,5 @@
 <?php
-// routes/web.php
+// routes/web.php - Simplified routes matching Figma design
 
 use App\Http\Controllers\AuthController;
 use App\Http\Controllers\QuestionController;
@@ -22,26 +22,17 @@ Route::middleware('auth')->group(function () {
     
     // Dashboard routes
     Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
-    Route::get('/dashboard/factor', [DashboardController::class, 'factorDashboard'])->name('dashboard.factor');
+    
+    // Factor dashboard - simplified to match Figma design
+    Route::get('/dashboard/factor/{factor?}', [DashboardController::class, 'factorDashboard'])->name('dashboard.factor');
+    
     Route::get('/dashboard/historical', [AssessmentController::class, 'assessmentHistory'])->name('dashboard.historical');
 
-    // Dashboard AJAX Routes for Factor Dashboard
+    // Dashboard AJAX Routes (keeping for any dynamic updates)
     Route::get('/dashboard/factor/questions', [DashboardController::class, 'getFactorQuestionsAjax'])->name('dashboard.factor.questions.ajax');
     Route::get('/dashboard/factor/actions', [DashboardController::class, 'getCorrectiveActionsAjax'])->name('dashboard.factor.actions.ajax');
     Route::get('/dashboard/factor/historical', [DashboardController::class, 'getFactorHistoricalDataAjax'])->name('dashboard.factor.historical.ajax');
     Route::get('/dashboard/historical/ajax', [DashboardController::class, 'getHistoricalDataAjax'])->name('dashboard.historical.ajax');
-    
-    // Debug routes (remove these in production)
-    Route::get('/debug/questions', [DashboardController::class, 'debugQuestions']);
-    Route::get('/debug/actions', [DashboardController::class, 'debugCorrectiveActions']);
-    
-    // Legacy route redirects (for backward compatibility)
-    Route::get('/factor-dashboard', function() {
-        return redirect()->route('dashboard.factor');
-    });
-    Route::get('/historical-assessment', function() {
-        return redirect()->route('dashboard.historical');
-    });
     
     // Question management routes
     Route::get('/track-questions', [QuestionController::class, 'trackQuestions'])->name('questions.track');
@@ -78,37 +69,19 @@ Route::middleware('auth')->group(function () {
     Route::delete('/assessment/{assessment}', [AssessmentController::class, 'deleteAssessment'])->name('assessment.delete');
     Route::get('/factor/{factor}/questions', [AssessmentController::class, 'getFactorQuestions'])->name('assessment.factor-questions');
 
-    // CORRECTIVE ACTIONS MANAGEMENT ROUTES - FIXED
+    // Inside your authenticated routes group
+    Route::get('/questions/{question}/corrective-actions', [QuestionController::class, 'getCorrectiveActions'])->name('questions.corrective-actions.get');
+    Route::post('/questions/{question}/corrective-actions', [QuestionController::class, 'saveCorrectiveActions'])->name('questions.corrective-actions.save');
+
+    // CORRECTIVE ACTIONS MANAGEMENT ROUTES
     Route::prefix('admin')->name('admin.')->group(function () {
-        // Corrective Actions CRUD
         Route::get('/corrective-actions', [CorrectiveActionController::class, 'index'])->name('corrective-actions.index');
         Route::post('/corrective-actions', [CorrectiveActionController::class, 'store'])->name('corrective-actions.store');
         Route::get('/corrective-actions/{id}', [CorrectiveActionController::class, 'show'])->name('corrective-actions.show');
         Route::put('/corrective-actions/{id}', [CorrectiveActionController::class, 'update'])->name('corrective-actions.update');
         Route::delete('/corrective-actions/{id}', [CorrectiveActionController::class, 'destroy'])->name('corrective-actions.destroy');
-        
-        // Helper route for getting questions by factor (using ID instead of model binding)
         Route::get('/questions/by-factor/{id}', [QuestionController::class, 'getQuestionsByFactor'])->name('questions.by-factor');
     });
-    
-    // TEST ROUTE - Remove after testing
-    Route::get('/test-corrective-actions', function() {
-        try {
-            $factors = App\Models\Factor::where('is_active', true)->get();
-            return response()->json([
-                'success' => true,
-                'factors_count' => $factors->count(),
-                'factors' => $factors->pluck('name', 'id')
-            ]);
-        } catch (\Exception $e) {
-            return response()->json([
-                'success' => false,
-                'error' => $e->getMessage(),
-                'trace' => $e->getTraceAsString()
-            ]);
-        }
-    });
-    
 });
 
 // Public assessment routes (outside auth middleware)

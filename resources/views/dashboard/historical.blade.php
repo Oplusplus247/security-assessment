@@ -26,11 +26,10 @@
     <div class="bg-white rounded-xl shadow-sm overflow-hidden">
         {{-- Table Header --}}
         <div class="assessment-form-table-header px-6 py-4">
-            <div class="grid grid-cols-12 gap-4 text-sm font-semibold text-white">
+            <div class="grid grid-cols-10 gap-4 text-sm font-semibold text-white">
                 <div class="col-span-1">NO</div>
                 <div class="col-span-2">DATE</div>
                 <div class="col-span-3">ASSESSMENT TITLE</div>
-                <div class="col-span-2">DEPARTMENT</div>
                 <div class="col-span-2">READINESS LEVEL</div>
                 <div class="col-span-2">ACTIONS</div>
             </div>
@@ -40,7 +39,7 @@
         <div class="divide-y divide-gray-200">
             @if(isset($assessments) && $assessments->count() > 0)
                 @foreach($assessments as $index => $assessment)
-                <div class="grid grid-cols-12 gap-4 px-6 py-4 items-center text-sm bg-white hover:bg-gray-50">
+                <div class="grid grid-cols-10 gap-4 px-6 py-4 items-center text-sm bg-white hover:bg-gray-50">
                     {{-- Number --}}
                     <div class="col-span-1">
                         <span class="text-gray-700 font-medium">{{ ($assessments->currentPage() - 1) * $assessments->perPage() + $index + 1 }}</span>
@@ -61,26 +60,21 @@
                         </div>
                     </div>
                     
-                    {{-- Department --}}
-                    <div class="col-span-2">
-                        <span class="text-gray-700">{{ $assessment->department->name ?? 'Overall' }}</span>
-                    </div>
-                    
-                    {{-- Readiness Level --}}
+                    {{-- Readiness Level with Updated Color Logic --}}
                     <div class="col-span-2">
                         <div class="flex items-center">
                             <div class="flex-1">
-                                <div class="text-sm font-medium text-gray-900">{{ $assessment->readiness_level }}/5.0</div>
+                                <div class="text-sm font-medium text-gray-900">{{ number_format($assessment->readiness_level, 1) }}/4.0</div>
                                 <div class="w-full bg-gray-200 rounded-full h-2 mt-1">
-                                    {{-- FIXED: New color logic: >=3 green, >=2 orange, <2 red --}}
                                     <div class="h-2 rounded-full" 
-                                         style="width: {{ ($assessment->readiness_level / 5) * 100 }}%; background-color: {{ getReadinessBarColor($assessment->readiness_level) }}"></div>
+                                         style="width: {{ ($assessment->readiness_level / 4) * 100 }}%; background-color: {{ getReadinessBarColor($assessment->readiness_level) }}"></div>
                                 </div>
+                                <div class="text-xs text-gray-500 mt-1">{{ getReadinessStage($assessment->readiness_level) }}</div>
                             </div>
                         </div>
                     </div>
                     
-                    {{-- Actions - UPDATED: Added share/PDF button --}}
+                    {{-- Actions - Updated: Added share/PDF button --}}
                     <div class="col-span-2">
                         <div class="flex items-center space-x-2">
                             {{-- View Button --}}
@@ -90,7 +84,7 @@
                                 <i class="fas fa-eye text-sm"></i>
                             </button>
                             
-                            {{-- NEW: Share/PDF Button --}}
+                            {{-- Share/PDF Button --}}
                             <button onclick="shareAssessmentPDF({{ $assessment->id }})" 
                                     class="text-green-600 hover:text-green-800 p-2 rounded-full hover:bg-green-50 transition duration-150"
                                     title="Download PDF Report">
@@ -182,22 +176,25 @@
     </div>
 </div>
 
-{{-- NEW: Hidden div for PDF generation --}}
+{{-- Hidden div for PDF generation --}}
 <div id="pdfContent" style="display: none; background: white; padding: 40px; font-family: Arial, sans-serif;">
     <!-- PDF content will be generated here -->
 </div>
 
-{{-- FIXED: Added color helper function --}}
+{{-- Updated helper functions with new mapping --}}
 @php
 function getReadinessBarColor($level) {
-    if ($level >= 3.0) {
-        return '#10b981'; // Green-500 for >= 3
-    } elseif ($level >= 2.0) {
-        return '#f97316'; // Orange-500 for >= 2 but < 3
+    if ($level >= 3.76) {
+        return '#10b981'; // Green for Mature (3.76-4.00)
+    } elseif ($level >= 2.51) {
+        return '#eab308'; // Yellow for Progressive (2.51-3.75)
+    } elseif ($level >= 1.26) {
+        return '#f97316'; // Orange for Formative (1.26-2.50)
     } else {
-        return '#ef4444'; // Red-500 for < 2
+        return '#ef4444'; // Red for Beginner (0.00-1.25)
     }
 }
+
 @endphp
 
 @endsection
@@ -288,7 +285,7 @@ function viewAssessment(assessmentId) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            currentAssessmentData = data; // Store for PDF generation
+            currentAssessmentData = data;
             document.getElementById('modalTitle').textContent = `Assessment Details - ${data.assessment.assessment_date}`;
             document.getElementById('modalContent').innerHTML = generateAssessmentHTML(data.assessment, data.responses_by_factor);
             document.getElementById('assessmentModal').classList.remove('hidden');
@@ -302,9 +299,7 @@ function viewAssessment(assessmentId) {
     });
 }
 
-// NEW: Share/PDF functionality
 function shareAssessmentPDF(assessmentId) {
-    // Show loading indicator
     const button = event.target.closest('button');
     const originalHTML = button.innerHTML;
     button.innerHTML = '<i class="fas fa-spinner fa-spin text-sm"></i>';
@@ -329,7 +324,6 @@ function shareAssessmentPDF(assessmentId) {
         alert('Error generating PDF');
     })
     .finally(() => {
-        // Restore button
         button.innerHTML = originalHTML;
         button.disabled = false;
     });
@@ -339,13 +333,11 @@ function generatePDFReport(assessment, responsesByFactor) {
     const { jsPDF } = window.jspdf;
     const pdf = new jsPDF('p', 'mm', 'a4');
     
-    // PDF Configuration
     const pageWidth = pdf.internal.pageSize.getWidth();
     const pageHeight = pdf.internal.pageSize.getHeight();
     const margin = 20;
     let yPosition = margin;
     
-    // Helper function to check if we need a new page
     function checkNewPage(height) {
         if (yPosition + height > pageHeight - margin) {
             pdf.addPage();
@@ -353,21 +345,20 @@ function generatePDFReport(assessment, responsesByFactor) {
         }
     }
     
-    // Helper function to get color based on score
     function getScoreColor(score) {
-        if (score >= 3) return [16, 185, 129]; // Green
-        if (score >= 2) return [249, 115, 22]; // Orange
+        if (score >= 3.76) return [16, 185, 129]; // Green
+        if (score >= 2.51) return [234, 179, 8]; // Yellow
+        if (score >= 1.26) return [249, 115, 22]; // Orange
         return [239, 68, 68]; // Red
     }
     
     // HEADER
     pdf.setFontSize(24);
     pdf.setFont(undefined, 'bold');
-    pdf.setTextColor(37, 64, 143); // #25408f
+    pdf.setTextColor(37, 64, 143);
     pdf.text('Assessment Report', pageWidth / 2, yPosition, { align: 'center' });
     yPosition += 15;
     
-    // Underline
     pdf.setDrawColor(37, 64, 143);
     pdf.setLineWidth(0.5);
     pdf.line(margin, yPosition, pageWidth - margin, yPosition);
@@ -383,12 +374,11 @@ function generatePDFReport(assessment, responsesByFactor) {
     pdf.setFontSize(11);
     pdf.setFont(undefined, 'normal');
     
-    // Assessment details in two columns
     const leftCol = margin;
     const rightCol = pageWidth / 2;
     
     pdf.text(`Date: ${assessment.assessment_date}`, leftCol, yPosition);
-    pdf.text(`Readiness Level: ${assessment.readiness_level}/5.0`, rightCol, yPosition);
+    pdf.text(`Readiness Level: ${assessment.readiness_level}/4.0`, rightCol, yPosition);
     yPosition += 6;
     
     pdf.text(`Department: ${assessment.department.name}`, leftCol, yPosition);
@@ -398,14 +388,12 @@ function generatePDFReport(assessment, responsesByFactor) {
     // Overall readiness bar
     const barWidth = pageWidth - (2 * margin);
     const barHeight = 8;
-    const fillWidth = (assessment.readiness_level / 5) * barWidth;
+    const fillWidth = (assessment.readiness_level / 4) * barWidth; // Updated for 0-4 scale
     const scoreColor = getScoreColor(assessment.readiness_level);
     
-    // Background bar
     pdf.setFillColor(243, 244, 246);
     pdf.rect(margin, yPosition, barWidth, barHeight, 'F');
     
-    // Progress bar
     pdf.setFillColor(scoreColor[0], scoreColor[1], scoreColor[2]);
     pdf.rect(margin, yPosition, fillWidth, barHeight, 'F');
     yPosition += 20;
@@ -417,30 +405,36 @@ function generatePDFReport(assessment, responsesByFactor) {
     pdf.text('Detailed Results by Factor', margin, yPosition);
     yPosition += 15;
     
-    // Process each factor
     for (const [factorName, responses] of Object.entries(responsesByFactor)) {
         checkNewPage(30);
         
-        // Factor header
         pdf.setFontSize(14);
         pdf.setFont(undefined, 'bold');
         pdf.setTextColor(37, 64, 143);
         pdf.text(factorName, margin, yPosition);
         yPosition += 10;
         
-        // Calculate factor average
-        const factorAverage = responses.reduce((sum, r) => sum + r.score, 0) / responses.length;
+        // Calculate factor average with weights
+        let totalWeightedScore = 0;
+        let totalWeight = 0;
+        
+        responses.forEach(response => {
+            const weight = response.question.weight || 1;
+            totalWeightedScore += response.score * weight;
+            totalWeight += weight;
+        });
+        
+        const factorAverage = totalWeight > 0 ? totalWeightedScore / totalWeight : 0;
         const factorColor = getScoreColor(factorAverage);
         
         pdf.setFontSize(10);
         pdf.setFont(undefined, 'normal');
         pdf.setTextColor(0, 0, 0);
-        pdf.text(`Average Score: ${factorAverage.toFixed(1)}/5.0`, margin, yPosition);
+        pdf.text(`Average Score: ${factorAverage.toFixed(1)}/4.0`, margin, yPosition);
         yPosition += 8;
         
-        // Factor average bar
         const factorBarWidth = (pageWidth - (2 * margin)) * 0.6;
-        const factorFillWidth = (factorAverage / 5) * factorBarWidth;
+        const factorFillWidth = (factorAverage / 4) * factorBarWidth;
         
         pdf.setFillColor(243, 244, 246);
         pdf.rect(margin, yPosition, factorBarWidth, 6, 'F');
@@ -454,7 +448,6 @@ function generatePDFReport(assessment, responsesByFactor) {
             
             const questionColor = getScoreColor(response.score);
             
-            // Question text (truncated if too long)
             let questionText = response.question.question;
             if (questionText.length > 80) {
                 questionText = questionText.substring(0, 80) + '...';
@@ -464,14 +457,13 @@ function generatePDFReport(assessment, responsesByFactor) {
             pdf.setTextColor(0, 0, 0);
             pdf.text(`${index + 1}. ${questionText}`, margin + 5, yPosition);
             
-            // Score badge
             const scoreX = pageWidth - margin - 25;
             pdf.setFillColor(questionColor[0], questionColor[1], questionColor[2]);
             pdf.roundedRect(scoreX, yPosition - 4, 20, 8, 2, 2, 'F');
             
             pdf.setFontSize(8);
             pdf.setTextColor(255, 255, 255);
-            pdf.text(`${response.score}/5`, scoreX + 10, yPosition, { align: 'center' });
+            pdf.text(`${response.score}/4`, scoreX + 10, yPosition, { align: 'center' });
             
             yPosition += 10;
         });
@@ -486,7 +478,6 @@ function generatePDFReport(assessment, responsesByFactor) {
     pdf.text(`Generated on ${now.toLocaleDateString()} at ${now.toLocaleTimeString()}`, margin, pageHeight - 10);
     pdf.text('Company Assessment System', pageWidth - margin, pageHeight - 10, { align: 'right' });
     
-    // Download the PDF
     const fileName = `Assessment_Report_${assessment.assessment_date.replace(/\//g, '-')}.pdf`;
     pdf.save(fileName);
 }
@@ -500,13 +491,7 @@ function printModalContent() {
 }
 
 function generateAssessmentHTML(assessment, responsesByFactor) {
-    // Updated color logic in modal as well
-    let barColor = '#ef4444'; // Red default
-    if (assessment.readiness_level >= 3.0) {
-        barColor = '#10b981'; // Green
-    } else if (assessment.readiness_level >= 2.0) {
-        barColor = '#f97316'; // Orange
-    }
+    const barColor = getReadinessBarColorJS(assessment.readiness_level);
     
     let html = `
         <div class="assessment-summary">
@@ -517,10 +502,10 @@ function generateAssessmentHTML(assessment, responsesByFactor) {
                     <p><strong>Department:</strong> ${assessment.department.name}</p>
                 </div>
                 <div>
-                    <p><strong>Readiness Level:</strong> ${assessment.readiness_level}/5.0</p>
+                    <p><strong>Readiness Level:</strong> ${assessment.readiness_level}/4.0</p>
                     <p><strong>Status:</strong> ${assessment.status}</p>
                     <div class="w-full bg-white bg-opacity-30 rounded-full h-2 mt-2">
-                        <div class="h-2 rounded-full" style="width: ${(assessment.readiness_level / 5) * 100}%; background-color: ${barColor}"></div>
+                        <div class="h-2 rounded-full" style="width: ${(assessment.readiness_level / 4) * 100}%; background-color: ${barColor}"></div>
                     </div>
                 </div>
             </div>
@@ -535,18 +520,12 @@ function generateAssessmentHTML(assessment, responsesByFactor) {
         `;
         
         responses.forEach(response => {
-            // Updated color logic for individual response scores
-            let scoreColor = '#ef4444'; // Red default
-            if (response.score >= 3) {
-                scoreColor = '#10b981'; // Green
-            } else if (response.score >= 2) {
-                scoreColor = '#f97316'; // Orange
-            }
+            const scoreColor = getScoreColorJS(response.score);
             
             html += `
                 <div class="flex justify-between items-center text-sm">
                     <span class="text-gray-600">${response.question.question.substring(0, 80)}...</span>
-                    <span class="font-medium px-2 py-1 rounded text-white text-xs" style="background-color: ${scoreColor}">${response.score}/5</span>
+                    <span class="font-medium px-2 py-1 rounded text-white text-xs" style="background-color: ${scoreColor}">${response.score}/4</span>
                 </div>
             `;
         });
@@ -558,6 +537,20 @@ function generateAssessmentHTML(assessment, responsesByFactor) {
     }
     
     return html;
+}
+
+function getReadinessBarColorJS(level) {
+    if (level >= 3.76) return '#10b981'; // Green
+    if (level >= 2.51) return '#eab308'; // Yellow
+    if (level >= 1.26) return '#f97316'; // Orange
+    return '#ef4444'; // Red
+}
+
+function getScoreColorJS(score) {
+    if (score >= 3.76) return '#10b981'; // Green
+    if (score >= 2.51) return '#eab308'; // Yellow
+    if (score >= 1.26) return '#f97316'; // Orange
+    return '#ef4444'; // Red
 }
 
 function deleteAssessment(assessmentId) {
@@ -589,7 +582,6 @@ function closeModal() {
     currentAssessmentData = null;
 }
 
-// Close modal when clicking outside
 document.getElementById('assessmentModal').addEventListener('click', function(e) {
     if (e.target === this) {
         closeModal();

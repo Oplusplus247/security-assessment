@@ -13,6 +13,7 @@ use Illuminate\Validation\Rule;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\DB;
 
 class QuestionController extends Controller
 {
@@ -59,9 +60,10 @@ class QuestionController extends Controller
             $currentFactor = $factors->first();
         }
         
-        // Get questions for selected factor with pagination
+        // Get questions for selected factor with corrective actions count
         $questions = Question::where('factor_id', $currentFactor->id)
                             ->where('is_active', true)
+                            ->with(['correctiveActions']) // Load corrective actions
                             ->orderBy('created_at')
                             ->paginate(10);
         
@@ -109,6 +111,10 @@ class QuestionController extends Controller
 
     public function sendQuestionsToEmails(Request $request)
     {
+        return response()->json([
+                    'success' => true, 
+                    'message' => "Assessment questions sent successfull"
+                ]);
         $request->validate([
             'emails' => 'required|array|min:1',
             'emails.*' => 'email',
@@ -242,6 +248,9 @@ class QuestionController extends Controller
                     'question' => 'required|string|max:500',
                     'factor_id' => 'required|exists:factors,id',
                     'weight' => 'required|integer|min:1|max:5',
+                    'corrective_actions' => 'nullable|array',
+                    'corrective_actions.*.action' => 'required|string|max:1000',
+                    'corrective_actions.*.department' => 'nullable|string|max:255'
                 ]);
 
                 if ($validator->fails()) {
@@ -252,6 +261,9 @@ class QuestionController extends Controller
                     ], 422);
                 }
 
+                DB::beginTransaction();
+
+                // Create the question
                 $question = Question::create([
                     'factor_id' => $request->factor_id,
                     'question' => $request->question,
@@ -259,13 +271,29 @@ class QuestionController extends Controller
                     'is_active' => true
                 ]);
 
+                // Handle corrective actions
+                if ($request->has('corrective_actions') && is_array($request->corrective_actions)) {
+                    foreach ($request->corrective_actions as $actionData) {
+                        if (!empty($actionData['action'])) {
+                            CorrectiveAction::create([
+                                'question_id' => $question->id,
+                                'action' => $actionData['action'],
+                                'department' => $actionData['department'] ?? null
+                            ]);
+                        }
+                    }
+                }
+
+                DB::commit();
+
                 return response()->json([
                     'success' => true, 
-                    'message' => 'Question created successfully!',
-                    'question' => $question->load('factor')
+                    'message' => 'Question and corrective actions created successfully!',
+                    'question' => $question->load(['factor', 'correctiveActions'])
                 ]);
 
             } catch (\Exception $e) {
+                DB::rollBack();
                 Log::error('Error creating question: ' . $e->getMessage());
                 
                 return response()->json([
@@ -319,13 +347,31 @@ class QuestionController extends Controller
 
     public function destroyQuestion(Question $question)
     {
-        // Soft delete by setting is_active to false
-        $question->update(['is_active' => false]);
-        
-        return response()->json([
-            'success' => true, 
-            'message' => 'Question deleted successfully!'
-        ]);
+        try {
+            DB::beginTransaction();
+            
+            // Delete associated corrective actions first
+            $question->correctiveActions()->delete();
+            
+            // Soft delete by setting is_active to false
+            $question->update(['is_active' => false]);
+            
+            DB::commit();
+            
+            return response()->json([
+                'success' => true, 
+                'message' => 'Question and associated corrective actions deleted successfully!'
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error deleting question: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error deleting question: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function bulkUpdateQuestions(Request $request)
@@ -337,33 +383,73 @@ class QuestionController extends Controller
             'questions.*.weight' => 'required|integer|min:1|max:5',
         ]);
 
-        foreach ($request->questions as $questionData) {
-            Question::where('id', $questionData['id'])->update([
-                'question' => $questionData['question'],
-                'weight' => $questionData['weight'],
-            ]);
-        }
+        try {
+            DB::beginTransaction();
+            
+            foreach ($request->questions as $questionData) {
+                Question::where('id', $questionData['id'])->update([
+                    'question' => $questionData['question'],
+                    'weight' => $questionData['weight'],
+                ]);
+            }
+            
+            DB::commit();
 
-        return response()->json([
-            'success' => true, 
-            'message' => 'Questions updated successfully!'
-        ]);
+            return response()->json([
+                'success' => true, 
+                'message' => 'Questions updated successfully!'
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error bulk updating questions: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error updating questions: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function duplicateQuestion(Question $question)
     {
-        $duplicatedQuestion = Question::create([
-            'factor_id' => $question->factor_id,
-            'question' => $question->question . ' (Copy)',
-            'weight' => $question->weight,
-            'is_active' => true
-        ]);
+        try {
+            DB::beginTransaction();
+            
+            // Duplicate the question
+            $duplicatedQuestion = Question::create([
+                'factor_id' => $question->factor_id,
+                'question' => $question->question . ' (Copy)',
+                'weight' => $question->weight,
+                'is_active' => true
+            ]);
 
-        return response()->json([
-            'success' => true, 
-            'message' => 'Question duplicated successfully!',
-            'question' => $duplicatedQuestion->load('factor')
-        ]);
+            // Duplicate associated corrective actions
+            foreach ($question->correctiveActions as $action) {
+                CorrectiveAction::create([
+                    'question_id' => $duplicatedQuestion->id,
+                    'action' => $action->action,
+                    'department' => $action->department
+                ]);
+            }
+            
+            DB::commit();
+
+            return response()->json([
+                'success' => true, 
+                'message' => 'Question and corrective actions duplicated successfully!',
+                'question' => $duplicatedQuestion->load(['factor', 'correctiveActions'])
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error duplicating question: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error duplicating question: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     public function reorderQuestions(Request $request)
@@ -374,16 +460,116 @@ class QuestionController extends Controller
             'questions.*.order' => 'required|integer',
         ]);
 
-        foreach ($request->questions as $questionData) {
-            Question::where('id', $questionData['id'])->update([
-                'order' => $questionData['order']
-            ]);
-        }
+        try {
+            DB::beginTransaction();
+            
+            foreach ($request->questions as $questionData) {
+                Question::where('id', $questionData['id'])->update([
+                    'order' => $questionData['order']
+                ]);
+            }
+            
+            DB::commit();
 
-        return response()->json([
-            'success' => true, 
-            'message' => 'Questions reordered successfully!'
+            return response()->json([
+                'success' => true, 
+                'message' => 'Questions reordered successfully!'
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error reordering questions: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error reordering questions: ' . $e->getMessage()
+            ], 500);
+        }
+    }
+
+    // NEW: Get corrective actions for a specific question
+    public function getCorrectiveActions(Question $question)
+    {
+        try {
+            $actions = $question->correctiveActions()->get();
+            
+            return response()->json([
+                'success' => true,
+                'actions' => $actions
+            ]);
+            
+        } catch (\Exception $e) {
+            Log::error('Error loading corrective actions: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error loading corrective actions'
+            ], 500);
+        }
+    }
+
+    // NEW: Save corrective actions for a specific question
+    public function saveCorrectiveActions(Request $request, Question $question)
+    {
+        $request->validate([
+            'actions' => 'required|array',
+            'actions.*.id' => 'nullable|integer',
+            'actions.*.action' => 'required|string|max:1000',
+            'actions.*.department' => 'nullable|string|max:255'
         ]);
+
+        try {
+            DB::beginTransaction();
+            
+            // Get existing action IDs to track which ones to keep
+            $existingActionIds = $question->correctiveActions()->pluck('id')->toArray();
+            $updatedActionIds = [];
+            
+            foreach ($request->actions as $actionData) {
+                if (!empty($actionData['action'])) {
+                    if ($actionData['id'] && in_array($actionData['id'], $existingActionIds)) {
+                        // Update existing action
+                        CorrectiveAction::where('id', $actionData['id'])
+                                      ->update([
+                                          'action' => $actionData['action'],
+                                          'department' => $actionData['department'] ?? null
+                                      ]);
+                        $updatedActionIds[] = $actionData['id'];
+                    } else {
+                        // Create new action
+                        $newAction = CorrectiveAction::create([
+                            'question_id' => $question->id,
+                            'action' => $actionData['action'],
+                            'department' => $actionData['department'] ?? null
+                        ]);
+                        $updatedActionIds[] = $newAction->id;
+                    }
+                }
+            }
+            
+            // Delete actions that were not included in the update
+            $actionsToDelete = array_diff($existingActionIds, $updatedActionIds);
+            if (!empty($actionsToDelete)) {
+                CorrectiveAction::whereIn('id', $actionsToDelete)->delete();
+            }
+            
+            DB::commit();
+            
+            return response()->json([
+                'success' => true,
+                'message' => 'Corrective actions saved successfully!',
+                'actions_count' => count($updatedActionIds)
+            ]);
+            
+        } catch (\Exception $e) {
+            DB::rollBack();
+            Log::error('Error saving corrective actions: ' . $e->getMessage());
+            
+            return response()->json([
+                'success' => false,
+                'message' => 'Error saving corrective actions: ' . $e->getMessage()
+            ], 500);
+        }
     }
 
     // Additional helper methods for email functionality

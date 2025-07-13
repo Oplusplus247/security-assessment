@@ -37,9 +37,9 @@
         {{-- Table Header --}}
         <div class="assessment-form-table-header px-6 py-4">
             <div class="grid grid-cols-12 gap-4 text-xs font-medium text-white uppercase tracking-wider">
-                <div class="col-span-1">No.</div>
+                <div class="col-span-1">Q-ID</div>
                 <div class="col-span-5">Questions</div>
-                <div class="col-span-2">Response</div>
+                <div class="col-span-2">Response (0-4)</div>
                 <div class="col-span-1">Weight</div>
                 <div class="col-span-2">Weighted Score</div>
                 <div class="col-span-1">Comments</div>
@@ -50,9 +50,9 @@
         <div class="divide-y divide-gray-200" id="questionsContainer">
             @foreach($questions as $index => $question)
             <div class="grid grid-cols-12 gap-4 px-6 py-4 items-center text-sm bg-white hover:bg-gray-50 question-row" data-question-id="{{ $question->id }}">
-                {{-- Question Number --}}
+                {{-- Question ID --}}
                 <div class="col-span-1 text-center">
-                    <span class="text-gray-700 font-medium">{{ $index + 1 }}</span>
+                    <span class="text-gray-700 font-medium">{{ $question->id }}</span>
                 </div>
                 
                 {{-- Question Text --}}
@@ -63,13 +63,13 @@
                     @endif
                 </div>
                 
-                {{-- Response Dropdown --}}
+                {{-- Response Dropdown (0-4 scale) --}}
                 <div class="col-span-2">
                     <select class="response-select w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                             data-question-id="{{ $question->id }}"
                             onchange="handleResponseChange(this)">
                         <option value="">Not Yet Answered</option>
-                        @for($i = 1; $i <= 5; $i++)
+                        @for($i = 0; $i <= 4; $i++)
                             <option value="{{ $i }}" 
                                 {{ isset($existingResponses[$question->id]) && $existingResponses[$question->id]->score == $i ? 'selected' : '' }}>
                                 {{ $i }}
@@ -188,6 +188,20 @@
     </div>
 </div>
 
+{{-- Helper function for score labels --}}
+@php
+function getScoreLabel($score) {
+    switch($score) {
+        case 0: return 'Not Implemented';
+        case 1: return 'Minimally Implemented'; 
+        case 2: return 'Partially Implemented';
+        case 3: return 'Mostly Implemented';
+        case 4: return 'Fully Implemented';
+        default: return '';
+    }
+}
+@endphp
+
 @endsection
 
 @push('styles')
@@ -262,12 +276,12 @@ function handleResponseChange(selectElement) {
     const questionId = selectElement.dataset.questionId;
     const score = selectElement.value;
     
-    if (score) {
-        saveResponse(questionId, score);
+    if (score !== '') {
+        saveResponse(questionId, parseInt(score));
     }
 }
 
-// Save individual response
+// Save individual response with proper weight calculation
 function saveResponse(questionId, score, comment = null) {
     if (isLoading) return;
     
@@ -292,7 +306,7 @@ function saveResponse(questionId, score, comment = null) {
     .then(response => response.json())
     .then(data => {
         if (data.success) {
-            // Update weighted score
+            // Update weighted score display
             document.getElementById(`weighted-${questionId}`).textContent = data.weighted_score;
             
             // Mark row as answered
@@ -345,7 +359,6 @@ function updateNavigationButtons() {
     if (currentFactorIndex === factors.length - 1) {
         nextButton.innerHTML = '<i class="fas fa-flag-checkered mr-2"></i>Finish';
         nextButton.onclick = () => {
-            // Check if current factor is complete before finishing
             updateProgress().then(() => {
                 const progressPercentage = parseInt(document.getElementById('progressText').textContent);
                 if (progressPercentage >= 100) {
@@ -378,7 +391,6 @@ function updateProgress() {
         progressText.textContent = data.progress_percentage + '%';
         progressDetails.textContent = `${data.answered_questions} of ${data.total_questions} questions completed`;
         
-        // Show submit section if 100% complete
         if (data.progress_percentage >= 100) {
             submitSection.style.display = 'block';
         } else {
@@ -395,8 +407,7 @@ function updateProgress() {
 // Load factor progress indicators
 function loadFactorProgress() {
     factors.forEach(factorSlug => {
-        // This would require an additional endpoint to get per-factor progress
-        // For now, we'll mark completed factors based on current progress
+        // Implementation for per-factor progress would go here
     });
 }
 
@@ -431,7 +442,6 @@ function submitAssessment() {
         if (data.success) {
             showMessage(data.message, 'success');
             
-            // Redirect to results or historical assessments
             setTimeout(() => {
                 if (data.redirect_url) {
                     window.location.href = data.redirect_url;
@@ -489,8 +499,8 @@ document.getElementById('commentForm').addEventListener('submit', function(e) {
     
     // Save the response if there's a score selected
     const scoreSelect = document.querySelector(`[data-question-id="${questionId}"]`);
-    if (scoreSelect && scoreSelect.value) {
-        saveResponse(questionId, scoreSelect.value, comment);
+    if (scoreSelect && scoreSelect.value !== '') {
+        saveResponse(questionId, parseInt(scoreSelect.value), comment);
     }
     
     closeCommentModal();
@@ -523,11 +533,11 @@ function showMessage(message, type = 'success', duration = 5000) {
     }
 }
 
-// Auto-save functionality (save responses periodically)
+// Auto-save functionality
 setInterval(() => {
     if (!isLoading && currentAssessmentId) {
         // Auto-save logic could go here
     }
-}, 30000); // Auto-save every 30 seconds
+}, 30000);
 </script>
 @endpush

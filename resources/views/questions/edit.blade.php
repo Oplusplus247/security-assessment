@@ -35,9 +35,10 @@
         <div class="assessment-form-table-header px-6 py-4">
             <div class="grid grid-cols-12 gap-4 text-sm font-semibold text-white">
                 <div class="col-span-1">No.</div>
-                <div class="col-span-7">Question</div>
-                <div class="col-span-2">Weight</div>
-                <div class="col-span-2 text-center">Actions</div>
+                <div class="col-span-5">Question</div>
+                <div class="col-span-1">Weight</div>
+                <div class="col-span-2">Corrective Actions</div>
+                <div class="col-span-3 text-center">Actions</div>
             </div>
         </div>
         
@@ -51,7 +52,7 @@
                 </div>
                 
                 {{-- Question Column --}}
-                <div class="col-span-7">
+                <div class="col-span-5">
                     <input type="text" 
                            value="{{ $question->question }}" 
                            class="question-input w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500" 
@@ -60,7 +61,7 @@
                 </div>
                 
                 {{-- Weight Column --}}
-                <div class="col-span-2">
+                <div class="col-span-1">
                     <select class="weight-select w-full border border-gray-300 rounded-md px-3 py-2 text-sm text-gray-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                             data-original="{{ $question->weight ?? 1 }}"
                             onchange="markAsChanged(this)">
@@ -72,8 +73,41 @@
                     </select>
                 </div>
                 
+                {{-- Corrective Actions Column --}}
+                <div class="col-span-2">
+                    <div class="flex items-center space-x-2">
+                        @php
+                            $actionsCount = $question->correctiveActions->count();
+                        @endphp
+                        <span class="text-xs bg-gray-100 text-gray-700 px-2 py-1 rounded-full">
+                            {{ $actionsCount }} {{ $actionsCount == 1 ? 'action' : 'actions' }}
+                        </span>
+                        <button onclick="manageCorrectiveActions({{ $question->id }}, '{{ addslashes($question->question) }}')" 
+                                class="text-blue-600 hover:text-blue-800 text-xs font-medium">
+                            <i class="fas fa-cogs mr-1"></i>
+                            {{ $actionsCount > 0 ? 'Edit' : 'Add' }}
+                        </button>
+                    </div>
+                    
+                    {{-- Show existing actions preview --}}
+                    @if($question->correctiveActions->count() > 0)
+                        <div class="mt-1">
+                            @foreach($question->correctiveActions->take(2) as $action)
+                                <div class="text-xs text-gray-500 truncate" title="{{ $action->action }}">
+                                    • {{ Str::limit($action->action, 40) }}
+                                </div>
+                            @endforeach
+                            @if($question->correctiveActions->count() > 2)
+                                <div class="text-xs text-gray-400">
+                                    +{{ $question->correctiveActions->count() - 2 }} more...
+                                </div>
+                            @endif
+                        </div>
+                    @endif
+                </div>
+                
                 {{-- Action Buttons Column --}}
-                <div class="col-span-2 flex justify-center space-x-2">
+                <div class="col-span-3 flex justify-center space-x-2">
                     <button onclick="updateQuestion({{ $question->id }})" 
                             class="update-btn text-blue-600 hover:text-blue-800 p-2 rounded-full hover:bg-blue-50 transition duration-150 hidden">
                         <i class="fas fa-save text-lg"></i>
@@ -150,36 +184,54 @@
 
 {{-- Add Question Modal --}}
 <div id="addQuestionModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
-    <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-1/2 shadow-lg rounded-md bg-white">
+    <div class="relative top-20 mx-auto p-5 border w-11/12 md:w-2/3 shadow-lg rounded-md bg-white">
         <div class="mt-3">
             <h3 class="text-lg font-medium text-gray-900 mb-4">Add New Question</h3>
             <form id="addQuestionForm">
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Factor</label>
-                    <select id="modalFactorSelect" name="factor_id" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        @foreach($factors as $factor)
-                            <option value="{{ $factor->id }}" {{ $currentFactor->id == $factor->id ? 'selected' : '' }}>
-                                {{ $factor->name }}
-                            </option>
-                        @endforeach
-                    </select>
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Factor</label>
+                        <select id="modalFactorSelect" name="factor_id" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            @foreach($factors as $factor)
+                                <option value="{{ $factor->id }}" {{ $currentFactor->id == $factor->id ? 'selected' : '' }}>
+                                    {{ $factor->name }}
+                                </option>
+                            @endforeach
+                        </select>
+                    </div>
+                    
+                    <div class="md:col-span-2">
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Question</label>
+                        <textarea id="modalQuestion" name="question" rows="3" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter your question here..."></textarea>
+                    </div>
+                    
+                    <div>
+                        <label class="block text-sm font-medium text-gray-700 mb-2">Weight</label>
+                        <select id="modalWeight" name="weight" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
+                            @for($i = 1; $i <= 5; $i++)
+                                <option value="{{ $i }}" {{ $i == 1 ? 'selected' : '' }}>X{{ $i }}</option>
+                            @endfor
+                        </select>
+                    </div>
+                    
+                    <div class="flex items-center">
+                        <input type="checkbox" id="addCorrectiveActions" class="mr-2">
+                        <label class="text-sm text-gray-700">Add corrective actions now</label>
+                    </div>
                 </div>
                 
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Question</label>
-                    <textarea id="modalQuestion" name="question" rows="3" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" placeholder="Enter your question here..."></textarea>
+                {{-- Corrective Actions Section (initially hidden) --}}
+                <div id="correctiveActionsSection" class="hidden mt-6 p-4 bg-gray-50 rounded-lg">
+                    <h4 class="text-md font-medium text-gray-800 mb-3">Corrective Actions</h4>
+                    <div id="correctiveActionsList">
+                        {{-- Dynamic action items will be added here --}}
+                    </div>
+                    <button type="button" onclick="addCorrectiveActionRow()" class="mt-2 text-blue-600 hover:text-blue-800 text-sm">
+                        <i class="fas fa-plus mr-1"></i>Add Action
+                    </button>
                 </div>
                 
-                <div class="mb-4">
-                    <label class="block text-sm font-medium text-gray-700 mb-2">Weight</label>
-                    <select id="modalWeight" name="weight" class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        @for($i = 1; $i <= 5; $i++)
-                            <option value="{{ $i }}" {{ $i == 1 ? 'selected' : '' }}>X{{ $i }}</option>
-                        @endfor
-                    </select>
-                </div>
-                
-                <div class="flex justify-end space-x-3">
+                <div class="flex justify-end space-x-3 mt-6">
                     <button type="button" onclick="closeAddQuestionModal()" class="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-400 focus:outline-none focus:ring-2 focus:ring-gray-300">
                         Cancel
                     </button>
@@ -188,6 +240,43 @@
                     </button>
                 </div>
             </form>
+        </div>
+    </div>
+</div>
+
+{{-- Manage Corrective Actions Modal --}}
+<div id="manageActionsModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full hidden z-50">
+    <div class="relative top-10 mx-auto p-5 border w-11/12 md:w-3/4 shadow-lg rounded-md bg-white">
+        <div class="mt-3">
+            <div class="flex justify-between items-center mb-4">
+                <h3 class="text-lg font-medium text-gray-900" id="manageActionsTitle">Manage Corrective Actions</h3>
+                <button onclick="closeManageActionsModal()" class="text-gray-400 hover:text-gray-600">
+                    <i class="fas fa-times text-xl"></i>
+                </button>
+            </div>
+            
+            <div class="mb-4 p-3 bg-blue-50 rounded-lg">
+                <p class="text-sm text-blue-800" id="questionPreview"></p>
+            </div>
+            
+            <div class="space-y-3" id="existingActionsList">
+                {{-- Existing actions will be loaded here --}}
+            </div>
+            
+            <div class="mt-4">
+                <button type="button" onclick="addNewActionRow()" class="w-full py-2 px-4 border-2 border-dashed border-gray-300 rounded-lg text-gray-600 hover:border-blue-400 hover:text-blue-600 transition duration-150">
+                    <i class="fas fa-plus mr-2"></i>Add New Corrective Action
+                </button>
+            </div>
+            
+            <div class="flex justify-end space-x-3 mt-6">
+                <button onclick="closeManageActionsModal()" class="px-4 py-2 bg-gray-300 text-gray-700 text-sm font-medium rounded-md hover:bg-gray-400">
+                    Close
+                </button>
+                <button onclick="saveAllActions()" class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700">
+                    <i class="fas fa-save mr-2"></i>Save All Actions
+                </button>
+            </div>
         </div>
     </div>
 </div>
@@ -220,12 +309,13 @@ textarea:focus {
     background-color: #f9fafb;
 }
 
-.hover\:text-red-600:hover {
-    color: #dc2626;
+.action-row {
+    transition: all 0.3s ease;
 }
 
-.hover\:bg-red-50:hover {
-    background-color: #fef2f2;
+.action-row.removing {
+    opacity: 0;
+    transform: translateX(-100%);
 }
 </style>
 @endpush
@@ -233,11 +323,25 @@ textarea:focus {
 @push('scripts')
 <script>
 let changedQuestions = new Set();
+let currentQuestionId = null;
+let actionCounter = 0;
 
 // Factor selector change
 document.getElementById('factorSelect').addEventListener('change', function() {
     const selectedFactor = this.value;
     window.location.href = `{{ route('questions.edit') }}?factor=${selectedFactor}`;
+});
+
+// Add corrective actions checkbox toggle
+document.getElementById('addCorrectiveActions').addEventListener('change', function() {
+    const section = document.getElementById('correctiveActionsSection');
+    if (this.checked) {
+        section.classList.remove('hidden');
+        addCorrectiveActionRow();
+    } else {
+        section.classList.add('hidden');
+        document.getElementById('correctiveActionsList').innerHTML = '';
+    }
 });
 
 // Mark question as changed
@@ -251,6 +355,188 @@ function markAsChanged(element) {
     // Show bulk save button
     document.getElementById('bulkSaveBtn').classList.remove('hidden');
 }
+
+// Manage corrective actions for a question
+function manageCorrectiveActions(questionId, questionText) {
+    currentQuestionId = questionId;
+    document.getElementById('manageActionsTitle').textContent = `Manage Corrective Actions`;
+    document.getElementById('questionPreview').textContent = questionText;
+    
+    // Load existing actions
+    loadExistingActions(questionId);
+    
+    document.getElementById('manageActionsModal').classList.remove('hidden');
+}
+
+function loadExistingActions(questionId) {
+    fetch(`/questions/${questionId}/corrective-actions`, {
+        headers: {
+            'Accept': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')
+        }
+    })
+    .then(response => response.json())
+    .then(data => {
+        const container = document.getElementById('existingActionsList');
+        container.innerHTML = '';
+        
+        if (data.actions && data.actions.length > 0) {
+            data.actions.forEach(action => {
+                addExistingActionRow(action);
+            });
+        }
+    })
+    .catch(error => {
+        console.error('Error loading actions:', error);
+    });
+}
+
+function addExistingActionRow(action) {
+    const container = document.getElementById('existingActionsList');
+    const actionRow = document.createElement('div');
+    actionRow.className = 'action-row flex items-center space-x-3 p-3 border border-gray-200 rounded-lg bg-white';
+    actionRow.dataset.actionId = action.id;
+    
+    actionRow.innerHTML = `
+        <div class="flex-1">
+            <textarea class="action-text w-full border border-gray-300 rounded-md px-3 py-2 text-sm resize-none" 
+                      rows="2" placeholder="Enter corrective action...">${action.action}</textarea>
+        </div>
+        <div class="w-40">
+            <select class="action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                <option value="">All Departments</option>
+                <option value="IT Department" ${action.department === 'IT Department' ? 'selected' : ''}>IT Department</option>
+                <option value="IR Team" ${action.department === 'IR Team' ? 'selected' : ''}>IR Team</option>
+                <option value="Management Support" ${action.department === 'Management Support' ? 'selected' : ''}>Management Support</option>
+                <option value="Security Team" ${action.department === 'Security Team' ? 'selected' : ''}>Security Team</option>
+            </select>
+        </div>
+        <button type="button" onclick="removeActionRow(this)" class="text-red-600 hover:text-red-800 p-2">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    
+    container.appendChild(actionRow);
+}
+
+function addNewActionRow() {
+    const container = document.getElementById('existingActionsList');
+    const actionRow = document.createElement('div');
+    actionRow.className = 'action-row flex items-center space-x-3 p-3 border border-gray-200 rounded-lg bg-white';
+    actionRow.dataset.actionId = 'new-' + (++actionCounter);
+    
+    actionRow.innerHTML = `
+        <div class="flex-1">
+            <textarea class="action-text w-full border border-gray-300 rounded-md px-3 py-2 text-sm resize-none" 
+                      rows="2" placeholder="Enter corrective action..."></textarea>
+        </div>
+        <div class="w-40">
+            <select class="action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                <option value="">All Departments</option>
+                <option value="IT Department">IT Department</option>
+                <option value="IR Team">IR Team</option>
+                <option value="Management Support">Management Support</option>
+                <option value="Security Team">Security Team</option>
+            </select>
+        </div>
+        <button type="button" onclick="removeActionRow(this)" class="text-red-600 hover:text-red-800 p-2">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    
+    container.appendChild(actionRow);
+    
+    // Focus on the new textarea
+    actionRow.querySelector('.action-text').focus();
+}
+
+function removeActionRow(button) {
+    const row = button.closest('.action-row');
+    row.classList.add('removing');
+    setTimeout(() => {
+        row.remove();
+    }, 300);
+}
+
+function saveAllActions() {
+    const actionRows = document.querySelectorAll('#existingActionsList .action-row');
+    const actions = [];
+    
+    actionRows.forEach(row => {
+        const actionText = row.querySelector('.action-text').value.trim();
+        const department = row.querySelector('.action-department').value;
+        const actionId = row.dataset.actionId;
+        
+        if (actionText) {
+            actions.push({
+                id: actionId.startsWith('new-') ? null : actionId,
+                action: actionText,
+                department: department || null
+            });
+        }
+    });
+    
+    // Save actions via AJAX
+    fetch(`/questions/${currentQuestionId}/corrective-actions`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ actions: actions })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccessMessage(data.message || 'Corrective actions saved successfully!');
+            closeManageActionsModal();
+            // Refresh the page to show updated action counts
+            location.reload();
+        } else {
+            showErrorMessage(data.message || 'Error saving corrective actions');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showErrorMessage('Error saving corrective actions');
+    });
+}
+
+function closeManageActionsModal() {
+    document.getElementById('manageActionsModal').classList.add('hidden');
+    currentQuestionId = null;
+}
+
+// Add corrective action row in add question modal
+function addCorrectiveActionRow() {
+    const container = document.getElementById('correctiveActionsList');
+    const actionRow = document.createElement('div');
+    actionRow.className = 'flex items-center space-x-3 mb-2';
+    
+    actionRow.innerHTML = `
+        <div class="flex-1">
+            <input type="text" class="new-action-text w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
+                   placeholder="Enter corrective action...">
+        </div>
+        <div class="w-40">
+            <select class="new-action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
+                <option value="">All Departments</option>
+                <option value="IT Department">IT Department</option>
+                <option value="IR Team">IR Team</option>
+                <option value="Management Support">Management Support</option>
+                <option value="Security Team">Security Team</option>
+            </select>
+        </div>
+        <button type="button" onclick="this.parentElement.remove()" class="text-red-600 hover:text-red-800 p-2">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    
+    container.appendChild(actionRow);
+}
+
+// Rest of the existing functions (updateQuestion, deleteQuestion, etc.) remain the same...
 
 // Update single question
 function updateQuestion(questionId) {
@@ -308,7 +594,7 @@ function cancelEdit(questionId) {
 
 // Delete question
 function deleteQuestion(questionId) {
-    if (confirm('Are you sure you want to delete this question?')) {
+    if (confirm('Are you sure you want to delete this question? This will also delete all associated corrective actions.')) {
         fetch(`/questions/${questionId}`, {
             method: 'DELETE',
             headers: {
@@ -401,6 +687,9 @@ function openAddQuestionModal() {
 function closeAddQuestionModal() {
     document.getElementById('addQuestionModal').classList.add('hidden');
     document.getElementById('addQuestionForm').reset();
+    document.getElementById('correctiveActionsSection').classList.add('hidden');
+    document.getElementById('correctiveActionsList').innerHTML = '';
+    document.getElementById('addCorrectiveActions').checked = false;
 }
 
 // Add question form submission
@@ -409,11 +698,24 @@ document.getElementById('addQuestionForm').addEventListener('submit', function(e
     
     const formData = new FormData(this);
     
-    // Debug: Log the form data
-    console.log('Form data:');
-    for (let [key, value] of formData.entries()) {
-        console.log(key, value);
+    // Collect corrective actions if any
+    const correctiveActions = [];
+    if (document.getElementById('addCorrectiveActions').checked) {
+        document.querySelectorAll('#correctiveActionsList .flex').forEach(row => {
+            const actionText = row.querySelector('.new-action-text').value.trim();
+            const department = row.querySelector('.new-action-department').value;
+            
+            if (actionText) {
+                correctiveActions.push({
+                    action: actionText,
+                    department: department || null
+                });
+            }
+        });
     }
+    
+    // Add corrective actions to form data
+    formData.append('corrective_actions', JSON.stringify(correctiveActions));
     
     fetch('{{ route("questions.store") }}', {
         method: 'POST',
@@ -425,30 +727,18 @@ document.getElementById('addQuestionForm').addEventListener('submit', function(e
         body: formData
     })
     .then(response => {
-        console.log('Response status:', response.status);
-        console.log('Response headers:', response.headers);
-        
-        // Check if response is HTML (error page) instead of JSON
-        const contentType = response.headers.get('content-type');
-        if (contentType && contentType.includes('text/html')) {
-            throw new Error('Server returned HTML instead of JSON. Check for validation errors or redirects.');
-        }
-        
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`);
         }
-        
         return response.json();
     })
     .then(data => {
-        console.log('Response data:', data);
         if (data.success) {
             showSuccessMessage(data.message);
             closeAddQuestionModal();
             location.reload(); // Refresh to show new question
         } else {
             showErrorMessage(data.message || 'Failed to add question');
-            console.log('Validation errors:', data.errors);
         }
     })
     .catch(error => {

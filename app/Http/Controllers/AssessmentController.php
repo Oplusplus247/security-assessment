@@ -16,10 +16,8 @@ class AssessmentController extends Controller
 {
     public function showForm($flow = null)
     {
-        // Get all active factors for navigation tabs
         $factors = Factor::where('is_active', true)->orderBy('name')->get();
         
-        // Get current factor (default to first factor)
         $currentFactorSlug = request()->get('factor', $factors->first()->slug ?? 'it-infrastructure');
         $currentFactor = Factor::where('slug', $currentFactorSlug)->first();
         
@@ -27,20 +25,17 @@ class AssessmentController extends Controller
             $currentFactor = $factors->first();
         }
         
-        // Get questions for current factor
         $questions = Question::where('factor_id', $currentFactor->id)
                             ->where('is_active', true)
                             ->orderBy('order')
                             ->orderBy('created_at')
                             ->get();
         
-        // Get current assessment if exists (in progress)
         $currentAssessment = Assessment::where('user_id', Auth::id())
                                      ->where('status', 'in_progress')
                                      ->latest()
                                      ->first();
         
-        // Get existing responses for current assessment
         $existingResponses = [];
         if ($currentAssessment) {
             $responses = Response::where('assessment_id', $currentAssessment->id)
@@ -53,7 +48,6 @@ class AssessmentController extends Controller
             }
         }
         
-        // Calculate progress
         $totalQuestions = Question::where('is_active', true)->count();
         $answeredQuestions = 0;
         
@@ -63,7 +57,6 @@ class AssessmentController extends Controller
         
         $progressPercentage = $totalQuestions > 0 ? round(($answeredQuestions / $totalQuestions) * 100) : 0;
         
-        // Get user's department
         $userDepartment = Auth::user()->department ?? Department::where('slug', 'overall')->first();
         
         return view('assessment.form', compact(
@@ -84,14 +77,13 @@ class AssessmentController extends Controller
     {
         $request->validate([
             'question_id' => 'required|exists:questions,id',
-            'score' => 'required|integer|min:1|max:5',
+            'score' => 'required|integer|min:0|max:4', // Updated to 0-4 scale
             'comment' => 'nullable|string|max:1000'
         ]);
 
         try {
             DB::beginTransaction();
             
-            // Get or create current assessment
             $assessment = Assessment::where('user_id', Auth::id())
                                   ->where('status', 'in_progress')
                                   ->latest()
@@ -103,13 +95,15 @@ class AssessmentController extends Controller
                     'department_id' => Auth::user()->department_id ?? Department::where('slug', 'overall')->first()->id,
                     'assessment_date' => now(),
                     'status' => 'in_progress',
-                    'target_level' => 5.0,
+                    'target_level' => 4.0, // Updated target for 0-4 scale
                     'readiness_level' => 0,
                     'total_score' => 0
                 ]);
             }
             
-            // Update or create response
+            $question = Question::find($request->question_id);
+            $weight = $question->weight ?? 1;
+            
             $response = Response::updateOrCreate(
                 [
                     'assessment_id' => $assessment->id,
@@ -122,7 +116,6 @@ class AssessmentController extends Controller
                 ]
             );
             
-            // Recalculate assessment totals
             $this->recalculateAssessmentScores($assessment);
             
             DB::commit();
@@ -130,7 +123,7 @@ class AssessmentController extends Controller
             return response()->json([
                 'success' => true,
                 'message' => 'Response saved successfully',
-                'weighted_score' => $response->score * $response->question->weight,
+                'weighted_score' => $response->score * $weight,
                 'assessment_id' => $assessment->id
             ]);
             
@@ -152,7 +145,6 @@ class AssessmentController extends Controller
                            ->orderBy('created_at')
                            ->get();
         
-        // Get current assessment responses for this factor
         $assessment = Assessment::where('user_id', Auth::id())
                                 ->where('status', 'in_progress')
                                 ->latest()
@@ -169,7 +161,7 @@ class AssessmentController extends Controller
                 $existingResponses[$response->question_id] = [
                     'score' => $response->score,
                     'comment' => $response->comment,
-                    'weighted_score' => $response->score * $response->question->weight
+                    'weighted_score' => $response->score * ($response->question->weight ?? 1)
                 ];
             }
         }
@@ -187,7 +179,6 @@ class AssessmentController extends Controller
         try {
             DB::beginTransaction();
             
-            // Get current assessment
             $assessment = Assessment::where('user_id', Auth::id())
                                   ->where('status', 'in_progress')
                                   ->latest()
@@ -200,7 +191,6 @@ class AssessmentController extends Controller
                 ], 404);
             }
             
-            // Check if all questions are answered
             $totalQuestions = Question::where('is_active', true)->count();
             $answeredQuestions = Response::where('assessment_id', $assessment->id)->count();
             
@@ -211,13 +201,11 @@ class AssessmentController extends Controller
                 ], 400);
             }
             
-            // Finalize assessment
             $assessment->update([
                 'status' => 'completed',
                 'assessment_date' => now()
             ]);
             
-            // Recalculate final scores
             $this->recalculateAssessmentScores($assessment);
             
             DB::commit();
@@ -266,7 +254,6 @@ class AssessmentController extends Controller
 
     public function showResults(Assessment $assessment)
     {
-        // Ensure user can only view their own assessments
         if ($assessment->user_id !== Auth::id()) {
             abort(403);
         }
@@ -280,7 +267,6 @@ class AssessmentController extends Controller
     public function assessmentHistory()
     {
         try {
-            // Get all completed assessments for the current user
             $assessments = Assessment::where('user_id', Auth::id())
                                     ->where('status', 'completed')
                                     ->with(['department', 'user'])
@@ -290,8 +276,7 @@ class AssessmentController extends Controller
             return view('dashboard.historical', compact('assessments'));
             
         } catch (\Exception $e) {
-            // If there's an error, return view with empty collection
-            $assessments = Assessment::where('id', 0)->paginate(10); // Empty pagination
+            $assessments = Assessment::where('id', 0)->paginate(10);
             return view('dashboard.historical', compact('assessments'));
         }
     }
@@ -308,7 +293,7 @@ class AssessmentController extends Controller
             return;
         }
         
-        // Calculate weighted average
+        // Calculate weighted average properly
         $totalWeightedScore = 0;
         $totalWeight = 0;
         
@@ -328,7 +313,6 @@ class AssessmentController extends Controller
 
     public function downloadAssessment(Assessment $assessment)
     {
-        // Ensure user can only download their own assessments
         if ($assessment->user_id !== Auth::id()) {
             abort(403);
         }
@@ -336,14 +320,11 @@ class AssessmentController extends Controller
         $responses = $assessment->responses()->with(['question.factor'])->get();
         $responsesByFactor = $responses->groupBy('question.factor.name');
         
-        // Generate PDF or Excel report
-        // For now, return a view that can be printed
         return view('assessment.download', compact('assessment', 'responsesByFactor'));
     }
 
     public function editAssessment(Assessment $assessment)
     {
-        // Ensure user can only edit their own assessments and within time limit
         if ($assessment->user_id !== Auth::id()) {
             abort(403);
         }
@@ -352,18 +333,16 @@ class AssessmentController extends Controller
             return redirect()->route('assessment.history')->with('error', 'Assessment can only be edited within 7 days of creation.');
         }
         
-        // Create a new assessment based on the existing one
         $newAssessment = Assessment::create([
             'user_id' => Auth::id(),
             'department_id' => $assessment->department_id,
             'assessment_date' => now(),
             'status' => 'in_progress',
-            'target_level' => $assessment->target_level,
+            'target_level' => 4.0, // Updated for 0-4 scale
             'readiness_level' => 0,
             'total_score' => 0
         ]);
         
-        // Copy responses from original assessment
         $originalResponses = $assessment->responses()->with('question')->get();
         foreach ($originalResponses as $response) {
             Response::create([
@@ -375,7 +354,6 @@ class AssessmentController extends Controller
             ]);
         }
         
-        // Recalculate scores
         $this->recalculateAssessmentScores($newAssessment);
         
         return redirect()->route('assessment.form')->with('success', 'Assessment copied for editing. You can now modify your responses.');
@@ -383,7 +361,6 @@ class AssessmentController extends Controller
 
     public function getAssessmentDetails(Assessment $assessment)
     {
-        // Ensure user can only view their own assessments
         if ($assessment->user_id !== Auth::id()) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
@@ -401,16 +378,12 @@ class AssessmentController extends Controller
 
     public function deleteAssessment(Assessment $assessment)
     {
-        // Ensure user can only delete their own assessments
         if ($assessment->user_id !== Auth::id()) {
             return response()->json(['success' => false, 'message' => 'Unauthorized'], 403);
         }
         
         try {
-            // Delete responses first
             $assessment->responses()->delete();
-            
-            // Delete assessment
             $assessment->delete();
             
             return response()->json([
