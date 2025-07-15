@@ -290,7 +290,7 @@ function initializeCharts() {
                                         const mid = Math.ceil(words.length / 2);
                                         return [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
                                     } else {
-                                        return label.substring(0, 12) + '...';
+                                        return label;
                                     }
                                 }
                                 return label;
