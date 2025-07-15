@@ -2,18 +2,19 @@
 
 namespace App\Http\Controllers;
 
-use App\Models\Question;
 use App\Models\Factor;
+use App\Models\Question;
+use App\Models\Department;
+use Illuminate\Http\Request;
+use App\Models\AssessmentToken;
+use Illuminate\Validation\Rule;
 use App\Models\CorrectiveAction;
 use App\Models\QuestionTracking;
-use App\Models\AssessmentToken;
 use App\Mail\AssessmentInvitation;
-use Illuminate\Http\Request;
-use Illuminate\Validation\Rule;
-use Illuminate\Support\Facades\Validator;
-use Illuminate\Support\Facades\Mail;
-use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Validator;
 
 class QuestionController extends Controller
 {
@@ -53,6 +54,8 @@ class QuestionController extends Controller
         
         // Get all factors for dropdown
         $factors = Factor::where('is_active', true)->get();
+
+        $departments = Department::orderBy('name')->get();
         
         // Get current factor
         $currentFactor = Factor::where('slug', $selectedFactor)->first();
@@ -67,7 +70,7 @@ class QuestionController extends Controller
                             ->orderBy('created_at')
                             ->paginate(10);
         
-        return view('questions.edit', compact('questions', 'factors', 'currentFactor'));
+        return view('questions.edit', compact('questions', 'factors', 'currentFactor', 'departments'));
     }
 
     public function sendQuestions()
@@ -241,7 +244,6 @@ class QuestionController extends Controller
 
     public function storeQuestion(Request $request)
     {
-        // Always return JSON for AJAX requests, even on validation errors
         if ($request->wantsJson() || $request->ajax()) {
             try {
                 $validator = Validator::make($request->all(), [
@@ -250,7 +252,7 @@ class QuestionController extends Controller
                     'weight' => 'required|integer|min:1|max:5',
                     'corrective_actions' => 'nullable|array',
                     'corrective_actions.*.action' => 'required|string|max:1000',
-                    'corrective_actions.*.department' => 'nullable|string|max:255'
+                    'corrective_actions.*.department' => 'nullable|string|max:255' // Remove 'in' validation
                 ]);
 
                 if ($validator->fails()) {
@@ -263,7 +265,6 @@ class QuestionController extends Controller
 
                 DB::beginTransaction();
 
-                // Create the question
                 $question = Question::create([
                     'factor_id' => $request->factor_id,
                     'question' => $request->question,
@@ -275,10 +276,14 @@ class QuestionController extends Controller
                 if ($request->has('corrective_actions') && is_array($request->corrective_actions)) {
                     foreach ($request->corrective_actions as $actionData) {
                         if (!empty($actionData['action'])) {
+                            $department = isset($actionData['department']) && trim($actionData['department']) !== '' 
+                                        ? trim($actionData['department']) 
+                                        : null;
+                            
                             CorrectiveAction::create([
                                 'question_id' => $question->id,
                                 'action' => $actionData['action'],
-                                'department' => $actionData['department'] ?? null
+                                'department' => $department
                             ]);
                         }
                     }

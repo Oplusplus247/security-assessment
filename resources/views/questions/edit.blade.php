@@ -322,6 +322,9 @@ textarea:focus {
 
 @push('scripts')
 <script>
+    // 🔧 CORRECTED JavaScript for edit.blade.php
+// Replace the entire <script> section with this
+
 let changedQuestions = new Set();
 let currentQuestionId = null;
 let actionCounter = 0;
@@ -391,6 +394,7 @@ function loadExistingActions(questionId) {
     });
 }
 
+// ✅ FIXED: Consistent text input with datalist
 function addExistingActionRow(action) {
     const container = document.getElementById('existingActionsList');
     const actionRow = document.createElement('div');
@@ -403,13 +407,21 @@ function addExistingActionRow(action) {
                       rows="2" placeholder="Enter corrective action...">${action.action}</textarea>
         </div>
         <div class="w-40">
-            <select class="action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-                <option value="">All Departments</option>
-                <option value="IT Department" ${action.department === 'IT Department' ? 'selected' : ''}>IT Department</option>
-                <option value="IR Team" ${action.department === 'IR Team' ? 'selected' : ''}>IR Team</option>
-                <option value="Management Support" ${action.department === 'Management Support' ? 'selected' : ''}>Management Support</option>
-                <option value="Security Team" ${action.department === 'Security Team' ? 'selected' : ''}>Security Team</option>
-            </select>
+            <input type="text" 
+                   class="action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
+                   placeholder="Department name..."
+                   value="${action.department || ''}"
+                   list="departmentSuggestions">
+            <datalist id="departmentSuggestions">
+                <option value="All Departments">
+                <option value="IT Department">
+                <option value="IR Team">
+                <option value="Management Support">
+                <option value="Security Team">
+                <option value="Overall">
+                <option value="IT Infrastructure">
+                <option value="IR Plan">
+            </datalist>
         </div>
         <button type="button" onclick="removeActionRow(this)" class="text-red-600 hover:text-red-800 p-2">
             <i class="fas fa-trash"></i>
@@ -419,6 +431,7 @@ function addExistingActionRow(action) {
     container.appendChild(actionRow);
 }
 
+// ✅ FIXED: Consistent text input with datalist
 function addNewActionRow() {
     const container = document.getElementById('existingActionsList');
     const actionRow = document.createElement('div');
@@ -431,13 +444,20 @@ function addNewActionRow() {
                       rows="2" placeholder="Enter corrective action..."></textarea>
         </div>
         <div class="w-40">
-            <select class="action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-                <option value="">All Departments</option>
-                <option value="IT Department">IT Department</option>
-                <option value="IR Team">IR Team</option>
-                <option value="Management Support">Management Support</option>
-                <option value="Security Team">Security Team</option>
-            </select>
+            <input type="text" 
+                   class="action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
+                   placeholder="Department name..."
+                   list="departmentSuggestions">
+            <datalist id="departmentSuggestions">
+                <option value="All Departments">
+                <option value="IT Department">
+                <option value="IR Team">
+                <option value="Management Support">
+                <option value="Security Team">
+                <option value="Overall">
+                <option value="IT Infrastructure">
+                <option value="IR Plan">
+            </datalist>
         </div>
         <button type="button" onclick="removeActionRow(this)" class="text-red-600 hover:text-red-800 p-2">
             <i class="fas fa-trash"></i>
@@ -458,13 +478,14 @@ function removeActionRow(button) {
     }, 300);
 }
 
+// ✅ FIXED: Consistent text input handling
 function saveAllActions() {
     const actionRows = document.querySelectorAll('#existingActionsList .action-row');
     const actions = [];
     
     actionRows.forEach(row => {
         const actionText = row.querySelector('.action-text').value.trim();
-        const department = row.querySelector('.action-department').value;
+        const department = row.querySelector('.action-department').value.trim(); // Now consistently gets input value
         const actionId = row.dataset.actionId;
         
         if (actionText) {
@@ -508,7 +529,7 @@ function closeManageActionsModal() {
     currentQuestionId = null;
 }
 
-// Add corrective action row in add question modal
+// ✅ FIXED: Consistent text input in add question modal
 function addCorrectiveActionRow() {
     const container = document.getElementById('correctiveActionsList');
     const actionRow = document.createElement('div');
@@ -520,13 +541,10 @@ function addCorrectiveActionRow() {
                    placeholder="Enter corrective action...">
         </div>
         <div class="w-40">
-            <select class="new-action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm">
-                <option value="">All Departments</option>
-                <option value="IT Department">IT Department</option>
-                <option value="IR Team">IR Team</option>
-                <option value="Management Support">Management Support</option>
-                <option value="Security Team">Security Team</option>
-            </select>
+            <input type="text" 
+                   class="new-action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
+                   placeholder="Department name..."
+                   list="departmentSuggestions">
         </div>
         <button type="button" onclick="this.parentElement.remove()" class="text-red-600 hover:text-red-800 p-2">
             <i class="fas fa-trash"></i>
@@ -536,9 +554,7 @@ function addCorrectiveActionRow() {
     container.appendChild(actionRow);
 }
 
-// Rest of the existing functions (updateQuestion, deleteQuestion, etc.) remain the same...
-
-// Update single question
+// Rest of the existing functions remain the same...
 function updateQuestion(questionId) {
     const row = document.querySelector(`[data-question-id="${questionId}"]`);
     const questionText = row.querySelector('.question-input').value;
@@ -575,7 +591,6 @@ function updateQuestion(questionId) {
     });
 }
 
-// Cancel edit
 function cancelEdit(questionId) {
     const row = document.querySelector(`[data-question-id="${questionId}"]`);
     const questionInput = row.querySelector('.question-input');
@@ -592,7 +607,6 @@ function cancelEdit(questionId) {
     }
 }
 
-// Delete question
 function deleteQuestion(questionId) {
     if (confirm('Are you sure you want to delete this question? This will also delete all associated corrective actions.')) {
         fetch(`/questions/${questionId}`, {
@@ -616,7 +630,6 @@ function deleteQuestion(questionId) {
     }
 }
 
-// Duplicate question
 function duplicateQuestion(questionId) {
     fetch(`/questions/${questionId}/duplicate`, {
         method: 'POST',
@@ -628,7 +641,7 @@ function duplicateQuestion(questionId) {
     .then(data => {
         if (data.success) {
             showSuccessMessage(data.message);
-            location.reload(); // Refresh to show duplicated question
+            location.reload();
         } else {
             showErrorMessage('Failed to duplicate question');
         }
@@ -638,7 +651,6 @@ function duplicateQuestion(questionId) {
     });
 }
 
-// Bulk save questions
 function bulkSaveQuestions() {
     const questions = [];
     
@@ -664,7 +676,6 @@ function bulkSaveQuestions() {
         if (data.success) {
             showSuccessMessage(data.message);
             
-            // Reset all changed states
             changedQuestions.clear();
             document.querySelectorAll('.question-row.changed').forEach(row => {
                 row.classList.remove('changed');
@@ -679,7 +690,6 @@ function bulkSaveQuestions() {
     });
 }
 
-// Modal functions
 function openAddQuestionModal() {
     document.getElementById('addQuestionModal').classList.remove('hidden');
 }
@@ -692,13 +702,11 @@ function closeAddQuestionModal() {
     document.getElementById('addCorrectiveActions').checked = false;
 }
 
-// Add question form submission
 document.getElementById('addQuestionForm').addEventListener('submit', function(e) {
     e.preventDefault();
     
     const formData = new FormData(this);
     
-    // Collect corrective actions if any
     const correctiveActions = [];
     if (document.getElementById('addCorrectiveActions').checked) {
         document.querySelectorAll('#correctiveActionsList .flex').forEach(row => {
@@ -714,7 +722,6 @@ document.getElementById('addQuestionForm').addEventListener('submit', function(e
         });
     }
     
-    // Add corrective actions to form data
     formData.append('corrective_actions', JSON.stringify(correctiveActions));
     
     fetch('{{ route("questions.store") }}', {
@@ -736,7 +743,7 @@ document.getElementById('addQuestionForm').addEventListener('submit', function(e
         if (data.success) {
             showSuccessMessage(data.message);
             closeAddQuestionModal();
-            location.reload(); // Refresh to show new question
+            location.reload();
         } else {
             showErrorMessage(data.message || 'Failed to add question');
         }
@@ -747,7 +754,6 @@ document.getElementById('addQuestionForm').addEventListener('submit', function(e
     });
 });
 
-// Message functions
 function showSuccessMessage(message) {
     const successDiv = document.getElementById('successMessage');
     document.getElementById('successText').textContent = message;
@@ -768,4 +774,6 @@ function showErrorMessage(message) {
     }, 5000);
 }
 </script>
+
+
 @endpush

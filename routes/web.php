@@ -82,6 +82,14 @@ Route::middleware('auth')->group(function () {
         Route::delete('/corrective-actions/{id}', [CorrectiveActionController::class, 'destroy'])->name('corrective-actions.destroy');
         Route::get('/questions/by-factor/{id}', [QuestionController::class, 'getQuestionsByFactor'])->name('questions.by-factor');
     });
+
+    Route::get('/dashboard', [DashboardController::class, 'index'])->name('dashboard');
+    Route::get('/dashboard/factor/{factor?}', [DashboardController::class, 'factorDashboard'])->name('dashboard.factor');
+    Route::get('/dashboard/historical', [DashboardController::class, 'historicalAssessment'])->name('dashboard.historical');
+    
+    // AJAX routes
+    Route::get('/dashboard/historical-data-ajax', [DashboardController::class, 'getHistoricalDataAjax'])->name('dashboard.historical.ajax');
+    
 });
 
 // Public assessment routes (outside auth middleware)

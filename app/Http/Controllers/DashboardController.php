@@ -23,6 +23,8 @@ class DashboardController extends Controller
         $aggregatedReadiness = $this->getAggregatedReadiness($departmentId);
         $factorReadiness = $this->getFactorReadiness($departmentId);
         $historicalData = $this->getHistoricalData($departmentId);
+        $factors = Factor::where('is_active', true)->orderBy('name')->get();
+
         $departments = Department::all();
         
         return view('dashboard.index', compact(
@@ -30,7 +32,8 @@ class DashboardController extends Controller
             'aggregatedReadiness', 
             'factorReadiness',
             'historicalData',
-            'departments'
+            'departments',
+            'factors'
         ));
     }
 
@@ -369,15 +372,54 @@ class DashboardController extends Controller
     // AJAX Methods (keeping for compatibility)
     public function getHistoricalDataAjax(Request $request)
     {
-        $departmentSlug = $request->get('department', 'overall');
-        $department = $departmentSlug === 'overall' ? null : Department::where('slug', $departmentSlug)->first();
+        $filterType = $request->get('filter_type', 'overall'); // 'overall' or factor slug
         
-        $historicalData = $this->getHistoricalData($department?->id);
+        if ($filterType === 'overall') {
+            // Get overall historical data across all factors
+            $historicalData = $this->getOverallHistoricalData();
+        } else {
+            // Get historical data for specific factor
+            $factor = Factor::where('slug', $filterType)->first();
+            if ($factor) {
+                $historicalData = $this->getFactorHistoricalData($factor->id, null);
+            } else {
+                $historicalData = [];
+            }
+        }
         
         return response()->json([
             'success' => true,
             'data' => $historicalData
         ]);
+    }
+
+    private function getOverallHistoricalData()
+    {
+        $assessments = Assessment::where('status', 'completed')
+                                ->orderBy('assessment_date', 'desc')
+                                ->get()
+                                ->groupBy(function($assessment) {
+                                    return $assessment->assessment_date->format('Y-m-d');
+                                })
+                                ->map(function($group) {
+                                    return $group->first();
+                                })
+                                ->take(6)
+                                ->sortBy('assessment_date')
+                                ->values();
+        
+        $historicalData = [];
+        
+        foreach ($assessments as $assessment) {
+            $this->recalculateAssessmentScore($assessment);
+            $historicalData[] = [
+                'date' => $assessment->assessment_date->format('M Y'),
+                'readiness_level' => $assessment->readiness_level,
+                'target_level' => $assessment->target_level ?? 5.0
+            ];
+        }
+        
+        return $historicalData;
     }
 
     public function getFactorQuestionsAjax(Request $request)

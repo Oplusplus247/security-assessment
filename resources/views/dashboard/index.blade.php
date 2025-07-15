@@ -32,9 +32,9 @@
     <div class="bg-white rounded-xl shadow-sm p-6 min-h-[350px]">
         <h3 class="text-lg font-semibold text-gray-800">Aggregated Readiness Level</h3>
         <div class="-mx-6 h-0.5 bg-gray-200 my-4"></div>
-        
         <div class="flex items-center justify-center">
-            <div class="w-100 h-100 flex items-center justify-center">
+            <div class="w-[500px] h-[500px] flex items-center justify-center">
+                
                 <canvas id="radarChart"></canvas>
             </div>
         </div>
@@ -67,18 +67,20 @@
         </div>
     </div>
 
-    {{-- Historical Assessment --}}
     <div class="bg-white rounded-xl shadow-sm p-6 flex flex-col min-h-[350px] relative">
         <div class="flex justify-between items-center">
             <h3 class="text-xl font-semibold text-gray-800">Historical Assessment</h3>
             <select id="departmentSelect" class="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500">
-                @foreach($departments as $department)
-                    <option value="{{ $department->slug }}">{{ $department->name }}</option>
+                <option value="overall">Overall</option>
+                @php
+                    $factors = \App\Models\Factor::where('is_active', true)->orderBy('name')->get();
+                @endphp
+                @foreach($factors as $factor)
+                    <option value="{{ $factor->slug }}">{{ $factor->name }}</option>
                 @endforeach
             </select>
         </div>
 
-        {{-- Full-width divider below title and dropdown --}}
         <div class="-mx-6 h-0.5 bg-gray-200 my-4"></div>
 
         <div class="flex-grow h-64 flex items-center justify-center">
@@ -106,20 +108,20 @@
 
 </div>
 
-{{-- Updated color helper functions with new mapping --}}
 @php
 function getFactorBackgroundColor($level) {
     if ($level >= 3.76) {
-        return '#10b981'; // Green for Mature (3.76-5.00)
+        return '#10b981';
     } elseif ($level >= 2.51) {
-        return '#eab308'; // Yellow for Progressive (2.51-3.75)
+        return '#eab308';
     } elseif ($level >= 1.26) {
-        return '#f97316'; // Orange for Formative (1.26-2.50)
+        return '#f97316';
     } else {
-        return '#ef4444'; // Red for Beginner (0.00-1.25)
+        return '#ef4444';
     }
 }
 @endphp
+
 
 @push('scripts')
 <script>
@@ -127,7 +129,6 @@ let gaugeChart = null;
 let radarChart = null;
 let historicalChart = null;
 
-// Updated readiness stage functions
 function getReadinessStage(score) {
     if (score >= 0.00 && score <= 1.25) {
         return 'Beginner';
@@ -145,24 +146,28 @@ function getReadinessStage(score) {
 function getReadinessStageColor(stage) {
     switch (stage) {
         case 'Beginner':
-            return '#ef4444'; // red-500
+            return '#ef4444';
         case 'Formative':
-            return '#f97316'; // orange-500
+            return '#f97316';
         case 'Progressive':
-            return '#eab308'; // yellow-500
+            return '#eab308';
         case 'Mature':
-            return '#10b981'; // green-500
+            return '#22c55e'; // Green - UPDATED
         default:
-            return '#6b7280'; // gray-500
+            return '#6b7280';
     }
 }
 
+// SINGLE DOMContentLoaded event listener
 document.addEventListener('DOMContentLoaded', function() {
+    console.log('🚀 DOM loaded, initializing charts...');
     initializeCharts();
     
+    // Event listener for dropdown change
     document.getElementById('departmentSelect').addEventListener('change', function() {
-        const selectedDepartment = this.value;
-        updateHistoricalChart(selectedDepartment);
+        const selectedFilter = this.value;
+        console.log('Filter changed to:', selectedFilter);
+        updateHistoricalChart(selectedFilter);
     });
 });
 
@@ -171,11 +176,27 @@ function initializeCharts() {
     const aggregatedReadiness = @json($aggregatedReadiness);
     const historicalData = @json($historicalData);
 
+    console.log('📊 Initializing charts with data:', { currentReadiness, aggregatedReadiness, historicalData });
+
+    // Destroy existing charts before creating new ones
+    if (gaugeChart) {
+        gaugeChart.destroy();
+        gaugeChart = null;
+    }
+    if (radarChart) {
+        radarChart.destroy();
+        radarChart = null;
+    }
+    if (historicalChart) {
+        historicalChart.destroy();
+        historicalChart = null;
+    }
+
     // Current Readiness Gauge Chart
     const gaugeCtx = document.getElementById('gaugeChart');
     if (gaugeCtx) {
         const readinessValue = currentReadiness.readiness_level || 0;
-        const remaining = 4 - readinessValue; // Updated for 0-4 scale
+        const remaining = 5 - readinessValue;
         
         const stage = getReadinessStage(readinessValue);
         const gaugeColor = getReadinessStageColor(stage);
@@ -232,17 +253,17 @@ function initializeCharts() {
                 responsive: true,
                 maintainAspectRatio: false,
                 layout: {
-                    padding: 10
+                    padding: 20
                 },
                 scales: {
                     r: {
                         beginAtZero: true,
-                        max: 4, // Updated for 0-4 scale
+                        max: 5,
                         ticks: {
                             stepSize: 1,
                             display: true,
                             color: '#9CA3AF',
-                            padding: 20,
+                            padding: 10,
                             font: {
                                 size: 10
                             }
@@ -257,11 +278,23 @@ function initializeCharts() {
                         },
                         pointLabels: {
                             font: {
-                                size: 14,
+                                size: 10,
                                 weight: '500'
                             },
                             color: '#374151',
-                            padding: 25 
+                            padding: 20,
+                            callback: function(label) {
+                                if (label.length > 12) {
+                                    const words = label.split(' ');
+                                    if (words.length > 1) {
+                                        const mid = Math.ceil(words.length / 2);
+                                        return [words.slice(0, mid).join(' '), words.slice(mid).join(' ')];
+                                    } else {
+                                        return label.substring(0, 12) + '...';
+                                    }
+                                }
+                                return label;
+                            }
                         }
                     }
                 },
@@ -272,19 +305,26 @@ function initializeCharts() {
                         titleColor: '#F9FAFB',
                         bodyColor: '#F9FAFB',
                         borderColor: '#374151',
-                        borderWidth: 1
+                        borderWidth: 1,
+                        callbacks: {
+                            title: function(context) {
+                                return context[0].label;
+                            }
+                        }
                     }
                 }
             }
         });
     }
 
+    // Initialize historical chart
     createHistoricalChart(historicalData);
 }
 
 function createHistoricalChart(data) {
     const historicalCtx = document.getElementById('historicalChart');
     if (historicalCtx) {
+        // Destroy existing chart before creating new one
         if (historicalChart) {
             historicalChart.destroy();
         }
@@ -331,7 +371,7 @@ function createHistoricalChart(data) {
                     },
                     y: {
                         beginAtZero: true,
-                        max: 4, // Updated for 0-4 scale
+                        max: 5,
                         ticks: {
                             stepSize: 1,
                             font: { size: 10 },
@@ -355,10 +395,10 @@ function createHistoricalChart(data) {
     }
 }
 
-function updateHistoricalChart(departmentSlug) {
+function updateHistoricalChart(selectedFilter) {
     document.getElementById('historicalLoading').classList.remove('hidden');
     
-    fetch(`{{ route('dashboard.historical.ajax') }}?department=${departmentSlug}`, {
+    fetch(`{{ route('dashboard.historical.ajax') }}?filter_type=${selectedFilter}`, {
         headers: {
             'Accept': 'application/json',
             'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content')

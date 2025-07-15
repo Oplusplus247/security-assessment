@@ -118,14 +118,14 @@
                 </div>
                 
                 <div class="mb-4">
-                    <label for="departmentSelect" class="block text-sm font-medium text-gray-700 mb-2">Department</label>
-                    <select id="departmentSelect" name="department" class="w-full border border-gray-300 rounded-md px-3 py-2 focus:outline-none focus:ring-2 focus:ring-blue-500">
-                        <option value="">All Departments</option>
-                        <option value="IT Department">IT Department</option>
-                        <option value="IR Team">IR Team</option>
-                        <option value="Management Support">Management Support</option>
-                        <option value="Security Team">Security Team</option>
-                    </select>
+                    <label for="departmentInput" class="block text-sm font-medium text-gray-700 mb-2">Department</label>
+                    <input type="text" 
+                        id="departmentInput" 
+                        name="department" 
+                        class="w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500" 
+                        placeholder="Enter department name (e.g., IT Department, HR, Finance...)"
+                        maxlength="255">
+                    <p class="text-xs text-gray-500 mt-1">Leave blank for "All Departments"</p>
                 </div>
                 
                 <div class="flex justify-end space-x-2">
@@ -168,6 +168,105 @@ function getDepartmentBadgeClass($department) {
 
 @push('scripts')
 <script>
+function addExistingActionRow(action) {
+    const container = document.getElementById('existingActionsList');
+    const actionRow = document.createElement('div');
+    actionRow.className = 'action-row flex items-center space-x-3 p-3 border border-gray-200 rounded-lg bg-white';
+    actionRow.dataset.actionId = action.id;
+    
+    actionRow.innerHTML = `
+        <div class="flex-1">
+            <textarea class="action-text w-full border border-gray-300 rounded-md px-3 py-2 text-sm resize-none" 
+                      rows="2" placeholder="Enter corrective action...">${action.action}</textarea>
+        </div>
+        <div class="w-40">
+            <input type="text" 
+                   class="action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
+                   placeholder="Department name"
+                   value="${action.department || ''}"
+                   maxlength="255">
+        </div>
+        <button type="button" onclick="removeActionRow(this)" class="text-red-600 hover:text-red-800 p-2">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    
+    container.appendChild(actionRow);
+}
+
+function addNewActionRow() {
+    const container = document.getElementById('existingActionsList');
+    const actionRow = document.createElement('div');
+    actionRow.className = 'action-row flex items-center space-x-3 p-3 border border-gray-200 rounded-lg bg-white';
+    actionRow.dataset.actionId = 'new-' + (++actionCounter);
+    
+    actionRow.innerHTML = `
+        <div class="flex-1">
+            <textarea class="action-text w-full border border-gray-300 rounded-md px-3 py-2 text-sm resize-none" 
+                      rows="2" placeholder="Enter corrective action..."></textarea>
+        </div>
+        <div class="w-40">
+            <input type="text" 
+                   class="action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
+                   placeholder="Department name"
+                   maxlength="255">
+        </div>
+        <button type="button" onclick="removeActionRow(this)" class="text-red-600 hover:text-red-800 p-2">
+            <i class="fas fa-trash"></i>
+        </button>
+    `;
+    
+    container.appendChild(actionRow);
+    
+    // Focus on the new textarea
+    actionRow.querySelector('.action-text').focus();
+}
+
+function saveAllActions() {
+    const actionRows = document.querySelectorAll('#existingActionsList .action-row');
+    const actions = [];
+    
+    actionRows.forEach(row => {
+        const actionText = row.querySelector('.action-text').value.trim();
+        const department = row.querySelector('.action-department').value.trim();
+        const actionId = row.dataset.actionId;
+        
+        if (actionText) {
+            actions.push({
+                id: actionId.startsWith('new-') ? null : actionId,
+                action: actionText,
+                department: department || null // Empty string becomes null
+            });
+        }
+    });
+    
+    // Save actions via AJAX
+    fetch(`/questions/${currentQuestionId}/corrective-actions`, {
+        method: 'POST',
+        headers: {
+            'Content-Type': 'application/json',
+            'X-CSRF-TOKEN': document.querySelector('meta[name="csrf-token"]').getAttribute('content'),
+            'Accept': 'application/json'
+        },
+        body: JSON.stringify({ actions: actions })
+    })
+    .then(response => response.json())
+    .then(data => {
+        if (data.success) {
+            showSuccessMessage(data.message || 'Corrective actions saved successfully!');
+            closeManageActionsModal();
+            // Refresh the page to show updated action counts
+            location.reload();
+        } else {
+            showErrorMessage(data.message || 'Error saving corrective actions');
+        }
+    })
+    .catch(error => {
+        console.error('Error:', error);
+        showErrorMessage('Error saving corrective actions');
+    });
+}
+
 function showAddModal(factorId = '') {
     document.getElementById('modalTitle').textContent = 'Add Corrective Action';
     document.getElementById('actionForm').reset();

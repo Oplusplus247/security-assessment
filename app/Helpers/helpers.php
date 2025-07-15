@@ -58,10 +58,8 @@ if (!function_exists('getReadinessStage')) {
             return 'Formative';
         } elseif ($score >= 2.51 && $score <= 3.75) {
             return 'Progressive';
-        } elseif ($score >= 3.76 && $score <= 5.00) {
-            return 'Mature';
         } else {
-            return 'Unknown';
+            return 'Mature';
         }
     }
 }

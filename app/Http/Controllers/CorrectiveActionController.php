@@ -40,7 +40,7 @@ class CorrectiveActionController extends Controller
             $validator = Validator::make($request->all(), [
                 'question_id' => 'required|exists:questions,id',
                 'action' => 'required|string|max:1000',
-                'department' => 'nullable|string|max:255|in:,IT Department,IR Team,Management Support,Security Team,All Departments'
+                'department' => 'nullable|string|max:255' // Removed the 'in:' restriction to allow free text
             ]);
 
             if ($validator->fails()) {
@@ -51,10 +51,12 @@ class CorrectiveActionController extends Controller
                 ], 422);
             }
 
-            // Handle "All Departments" case properly
+            // Clean up department input - trim whitespace and set null if empty
             $department = $request->department;
-            if (empty($department) || $department === 'All Departments' || $department === '') {
+            if (empty(trim($department))) {
                 $department = null;
+            } else {
+                $department = trim($department);
             }
 
             $correctiveAction = CorrectiveAction::create([
@@ -100,7 +102,7 @@ class CorrectiveActionController extends Controller
             $validator = Validator::make($request->all(), [
                 'question_id' => 'required|exists:questions,id',
                 'action' => 'required|string|max:1000',
-                'department' => 'nullable|string|max:255|in:,IT Department,IR Team,Management Support,Security Team,All Departments'
+                'department' => 'nullable|string|max:255' // Removed the 'in:' restriction to allow free text
             ]);
 
             if ($validator->fails()) {
@@ -111,10 +113,12 @@ class CorrectiveActionController extends Controller
                 ], 422);
             }
 
-            // Handle "All Departments" case properly
+            // Clean up department input - trim whitespace and set null if empty
             $department = $request->department;
-            if (empty($department) || $department === 'All Departments' || $department === '') {
+            if (empty(trim($department))) {
                 $department = null;
+            } else {
+                $department = trim($department);
             }
 
             $action->update([
