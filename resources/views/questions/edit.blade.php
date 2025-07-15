@@ -322,12 +322,37 @@ textarea:focus {
 
 @push('scripts')
 <script>
-    // 🔧 CORRECTED JavaScript for edit.blade.php
-// Replace the entire <script> section with this
-
 let changedQuestions = new Set();
 let currentQuestionId = null;
 let actionCounter = 0;
+
+// 🔥 Load departments from PHP variable passed by controller
+const departments = @json($departments);
+
+// 🔥 Helper function to generate department datalist options
+function generateDepartmentOptions() {
+    let options = '<option value="All Departments">';
+    
+    departments.forEach(dept => {
+        options += `<option value="${dept.name}">`;
+    });
+    
+    return options;
+}
+
+// 🔥 Helper function to create datalist element
+function createDepartmentDatalist() {
+    const datalistId = 'departmentSuggestions-' + Math.random().toString(36).substr(2, 9);
+    return {
+        datalistId: datalistId,
+        datalistHtml: `
+            <datalist id="${datalistId}">
+                <option value="All Departments">
+                ${departments.map(dept => `<option value="${dept.name}">`).join('')}
+            </datalist>
+        `
+    };
+}
 
 // Factor selector change
 document.getElementById('factorSelect').addEventListener('change', function() {
@@ -394,12 +419,13 @@ function loadExistingActions(questionId) {
     });
 }
 
-// ✅ FIXED: Consistent text input with datalist
 function addExistingActionRow(action) {
     const container = document.getElementById('existingActionsList');
     const actionRow = document.createElement('div');
     actionRow.className = 'action-row flex items-center space-x-3 p-3 border border-gray-200 rounded-lg bg-white';
     actionRow.dataset.actionId = action.id;
+    
+    const { datalistId, datalistHtml } = createDepartmentDatalist();
     
     actionRow.innerHTML = `
         <div class="flex-1">
@@ -411,17 +437,8 @@ function addExistingActionRow(action) {
                    class="action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
                    placeholder="Department name..."
                    value="${action.department || ''}"
-                   list="departmentSuggestions">
-            <datalist id="departmentSuggestions">
-                <option value="All Departments">
-                <option value="IT Department">
-                <option value="IR Team">
-                <option value="Management Support">
-                <option value="Security Team">
-                <option value="Overall">
-                <option value="IT Infrastructure">
-                <option value="IR Plan">
-            </datalist>
+                   list="${datalistId}">
+            ${datalistHtml}
         </div>
         <button type="button" onclick="removeActionRow(this)" class="text-red-600 hover:text-red-800 p-2">
             <i class="fas fa-trash"></i>
@@ -431,12 +448,13 @@ function addExistingActionRow(action) {
     container.appendChild(actionRow);
 }
 
-// ✅ FIXED: Consistent text input with datalist
 function addNewActionRow() {
     const container = document.getElementById('existingActionsList');
     const actionRow = document.createElement('div');
     actionRow.className = 'action-row flex items-center space-x-3 p-3 border border-gray-200 rounded-lg bg-white';
     actionRow.dataset.actionId = 'new-' + (++actionCounter);
+    
+    const { datalistId, datalistHtml } = createDepartmentDatalist();
     
     actionRow.innerHTML = `
         <div class="flex-1">
@@ -447,17 +465,8 @@ function addNewActionRow() {
             <input type="text" 
                    class="action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
                    placeholder="Department name..."
-                   list="departmentSuggestions">
-            <datalist id="departmentSuggestions">
-                <option value="All Departments">
-                <option value="IT Department">
-                <option value="IR Team">
-                <option value="Management Support">
-                <option value="Security Team">
-                <option value="Overall">
-                <option value="IT Infrastructure">
-                <option value="IR Plan">
-            </datalist>
+                   list="${datalistId}">
+            ${datalistHtml}
         </div>
         <button type="button" onclick="removeActionRow(this)" class="text-red-600 hover:text-red-800 p-2">
             <i class="fas fa-trash"></i>
@@ -478,14 +487,13 @@ function removeActionRow(button) {
     }, 300);
 }
 
-// ✅ FIXED: Consistent text input handling
 function saveAllActions() {
     const actionRows = document.querySelectorAll('#existingActionsList .action-row');
     const actions = [];
     
     actionRows.forEach(row => {
         const actionText = row.querySelector('.action-text').value.trim();
-        const department = row.querySelector('.action-department').value.trim(); // Now consistently gets input value
+        const department = row.querySelector('.action-department').value.trim();
         const actionId = row.dataset.actionId;
         
         if (actionText) {
@@ -497,7 +505,6 @@ function saveAllActions() {
         }
     });
     
-    // Save actions via AJAX
     fetch(`/questions/${currentQuestionId}/corrective-actions`, {
         method: 'POST',
         headers: {
@@ -529,12 +536,14 @@ function closeManageActionsModal() {
     currentQuestionId = null;
 }
 
-// ✅ FIXED: Consistent text input in add question modal
 function addCorrectiveActionRow() {
     const container = document.getElementById('correctiveActionsList');
     const actionRow = document.createElement('div');
     actionRow.className = 'flex items-center space-x-3 mb-2';
     
+    const { datalistId, datalistHtml } = createDepartmentDatalist();
+    
+    console.log(datalistId, datalistHtml);
     actionRow.innerHTML = `
         <div class="flex-1">
             <input type="text" class="new-action-text w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
@@ -544,7 +553,8 @@ function addCorrectiveActionRow() {
             <input type="text" 
                    class="new-action-department w-full border border-gray-300 rounded-md px-3 py-2 text-sm" 
                    placeholder="Department name..."
-                   list="departmentSuggestions">
+                   list="${datalistId}">
+            ${datalistHtml}
         </div>
         <button type="button" onclick="this.parentElement.remove()" class="text-red-600 hover:text-red-800 p-2">
             <i class="fas fa-trash"></i>

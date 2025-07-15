@@ -54,7 +54,8 @@ class QuestionController extends Controller
         
         // Get all factors for dropdown
         $factors = Factor::where('is_active', true)->get();
-
+        
+        // 🔥 ADD THIS: Get all departments from database
         $departments = Department::orderBy('name')->get();
         
         // Get current factor
@@ -70,6 +71,7 @@ class QuestionController extends Controller
                             ->orderBy('created_at')
                             ->paginate(10);
         
+        // 🔥 ADD departments to the compact function
         return view('questions.edit', compact('questions', 'factors', 'currentFactor', 'departments'));
     }
 
